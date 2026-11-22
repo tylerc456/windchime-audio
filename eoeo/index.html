@@ -13,7 +13,7 @@
       :root{
         --bg:#ffffff; --ink:#101010; --ink-soft:#3d3d3d; --muted:#767676;
         --line:#101010; --hair:#e3e3e3; --panel:#f6f6f4; --panel-line:#dcdcd8;
-        --empty-ring:rgba(16,16,16,.28); --wave-dim:rgba(16,16,16,.4);
+        --empty-ring:rgba(16,16,16,.28); --thin-ring:rgba(16,16,16,.55); --wave-dim:rgba(16,16,16,.4);
         --rec:#d92323; --btn-ink:#ffffff;
         --shadow:0 10px 30px rgba(0,0,0,.08);
       }
@@ -21,7 +21,7 @@
         :root{
           --bg:#0b0b0b; --ink:#f4f4f2; --ink-soft:#cfcfcb; --muted:#9a9a94;
           --line:#f4f4f2; --hair:#262624; --panel:#151514; --panel-line:#2b2b28;
-          --empty-ring:rgba(244,244,242,.3); --wave-dim:rgba(244,244,242,.4);
+          --empty-ring:rgba(244,244,242,.3); --thin-ring:rgba(244,244,242,.55); --wave-dim:rgba(244,244,242,.4);
           --rec:#ff5a4e; --btn-ink:#0b0b0b; --shadow:0 10px 30px rgba(0,0,0,.5);
         }
       }
@@ -181,12 +181,12 @@
       .donut-seg-sel{ stroke:var(--rec); stroke-width:4; }
       .donut-seg.held{ stroke:var(--rec); stroke-width:5; }
       .donut-seg.drop-target{ stroke:var(--line); stroke-width:6; stroke-dasharray:10 8; }
-      .donut-thin{ fill:none; stroke:var(--empty-ring); stroke-width:2; pointer-events:none; }
+      .donut-thin{ fill:none; stroke:var(--thin-ring); stroke-width:2.5; pointer-events:none; }
       .donut-thin-arc{ fill:none; stroke:var(--rec); stroke-width:4.5; stroke-linecap:round; pointer-events:none; opacity:.92; }
       .donut-thin-dot{ fill:var(--ink); stroke:var(--bg); stroke-width:2; pointer-events:none; }
       .donut-float{ fill:var(--rec); fill-opacity:.13; stroke:var(--rec); stroke-opacity:.48; stroke-width:1.5; pointer-events:none; }
       .donut-float.dragging{ fill-opacity:.22; stroke-opacity:.85; stroke-width:2.2; }
-      .donut-thin-label{ font-family:"IBM Plex Mono",monospace; font-size:12px; fill:var(--muted); text-anchor:middle; pointer-events:none; }
+      .donut-thin-label{ font-family:"IBM Plex Mono",monospace; font-size:12px; fill:var(--muted); text-anchor:middle; pointer-events:none; paint-order:stroke; stroke:var(--bg); stroke-width:4px; stroke-linejoin:round; }
       .donut-thin-target{ fill:none; stroke:var(--rec); stroke-width:5; stroke-dasharray:10 8; pointer-events:none; }
       .donut-level-label{ font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:600; fill:var(--rec); text-anchor:middle; pointer-events:none; paint-order:stroke; stroke:var(--bg); stroke-width:4px; stroke-linejoin:round; }
       .donut-seg-sub{ font-family:"Archivo",sans-serif; font-size:12px; font-weight:700; fill:var(--ink-soft); text-anchor:middle; pointer-events:none; }
@@ -1029,6 +1029,23 @@ function loadFocusLevel(idx){
 }
 var songSel = 0, songMode = false, micBusy = false;
 var DONUT_RIN = 138, DONUT_ROUT = 224, DONUT_RMID = (DONUT_RIN + DONUT_ROUT) / 2;
+/* Thin-line layout: every non-focused level is drawn as its own ring OUTSIDE the
+   focused band — shorter loops step inward from the band's inner edge, longer
+   loops step outward from the band's outer edge — so a thin line never sits
+   under (or inside) the wide band. Spacing adapts to how many levels share a
+   side, so the outermost ring and its label stay inside the 640 viewBox. */
+function thinRadius(i, focusIdx){
+  var d = i - focusIdx;
+  if (d === 0) return DONUT_RMID;
+  if (d < 0){
+    var nIn = focusIdx; /* levels inside the band */
+    var stepIn = nIn > 1 ? Math.min(24, (DONUT_RIN - 18 - 36) / (nIn - 1)) : 0;
+    return DONUT_RIN - 18 + (d + 1) * stepIn;
+  }
+  var nOut = RING_DEFS.length - 1 - focusIdx; /* levels outside the band */
+  var stepOut = nOut > 1 ? Math.min(24, (300 - (DONUT_ROUT + 18)) / (nOut - 1)) : 0;
+  return DONUT_ROUT + 18 + (d - 1) * stepOut;
+}
 /* donut press-hold drag state: quick tap = chooser (unchanged); hold = select + roll / transfer */
 var donutDrag = null, donutHoldTimer = null, suppressDonutClick = false;
 /* donut focus swipe: a quick radial flick before the hold fires changes which loop is
@@ -1061,7 +1078,7 @@ function renderDonut(){
   if (donutAnim && rawT >= 1) donutAnim = null;
   var curRIn = DONUT_RIN, curROut = DONUT_ROUT, curRMid = DONUT_RMID;
   if (isAnim){
-    var inDefR = RING_DEFS[songFocus].r;
+    var inDefR = thinRadius(songFocus, donutAnim.from); /* where the incoming level sat as a thin ring */
     curRIn = donutLerp(inDefR - 3, DONUT_RIN, eased);
     curROut = donutLerp(inDefR + 3, DONUT_ROUT, eased);
     if (curROut - curRIn < 6){ var midTmp = (curRIn + curROut) / 2; curRIn = midTmp - 3; curROut = midTmp + 3; }
@@ -1069,29 +1086,42 @@ function renderDonut(){
   }
   function drawThinLevel(i){
     var def = RING_DEFS[i];
+    /* this level's own ring, clear of the focused band; while the rolling zoom
+       runs, the ring rolls from its radius around the old focus to its radius
+       around the new one, along with the incoming/outgoing bands */
+    var rT = isAnim ? donutLerp(thinRadius(i, donutAnim.from), thinRadius(i, songFocus), eased) : thinRadius(i, songFocus);
     var lvl = songLevels[i];
     var lvlSegs = lvl ? lvl.segments : [];
     var lvlCount = lvl ? lvl.segCount : 4;
     var filled = lvlSegs ? lvlSegs.filter(Boolean).length : 0;
     var isLevelTarget = !!(donutDrag && donutDrag.held && donutDrag.targetLevel && ((donutDrag.targetLevel < 0 && i === songFocus - 1) || (donutDrag.targetLevel > 0 && i === songFocus + 1)));
-    svgD.appendChild(el("circle", { "class": isLevelTarget ? "donut-thin-target" : "donut-thin", cx: CX, cy: CY, r: def.r }));
+    svgD.appendChild(el("circle", { "class": isLevelTarget ? "donut-thin-target" : "donut-thin", cx: CX, cy: CY, r: rT }));
     if (filled){
       var stepL = 360 / lvlCount, gapL = Math.min(2.5, stepL * 0.09);
       lvlSegs.forEach(function(sg, kk){
         if (!sg) return;
-        var aa0 = kk * stepL + gapL, aa1 = (kk + 1) * stepL - gapL;
-        if (aa1 - aa0 < 1) return;
-        svgD.appendChild(el("path", { "class": "donut-thin-arc", d: arcPath(def.r, aa0, aa1) }));
+        var aa0, aa1;
+        if (lvlCount === 1){
+          /* one section spans the whole loop, so a section-wide arc would paint
+             the entire line red — draw a short marker at the sample's start instead */
+          aa0 = norm360(sg.rollDeg || 0);
+          aa1 = aa0 + 30;
+        } else {
+          /* one red arc per filled section, spanning exactly that section */
+          aa0 = kk * stepL + gapL; aa1 = (kk + 1) * stepL - gapL;
+        }
+        if (aa1 - aa0 < 1 || aa1 - aa0 >= 359) return;
+        svgD.appendChild(el("path", { "class": "donut-thin-arc", d: arcPath(rT, aa0, aa1) }));
       });
       var bpNow = (typeof beatPos === "function") ? beatPos() : 0;
       var da = norm360(bpNow / def.beats * 360);
-      var dp = polar(def.r, da);
+      var dp = polar(rT, da);
       var dot = el("circle", { "class": "donut-thin-dot", cx: dp[0], cy: dp[1], r: 5.5 });
       svgD.appendChild(dot);
-      thinDotEls.push({ el: dot, def: def });
+      thinDotEls.push({ el: dot, def: def, r: rT });
     }
-    var lp = polar(def.r, 180);
-    var t = el("text", { "class": isLevelTarget ? "donut-level-label" : "donut-thin-label", x: lp[0], y: CY + def.r + 14 });
+    var lp = polar(rT, 180);
+    var t = el("text", { "class": isLevelTarget ? "donut-level-label" : "donut-thin-label", x: lp[0], y: CY + rT + 14 });
     t.textContent = isLevelTarget ? (donutDrag.targetLevel < 0 ? "Release \u2014 shorter loop (" + def.label + ")" : "Release \u2014 longer loop (" + def.label + ")") : def.label + (filled ? " \u00b7 " + filled + " filled" : "");
     svgD.appendChild(t);
   }
@@ -1099,7 +1129,7 @@ function renderDonut(){
     if (!isAnim || outgoingIdx < 0 || outgoingIdx === songFocus) return;
     var lvlOut = songLevels[outgoingIdx];
     if (!lvlOut) return;
-    var outDefR = RING_DEFS[outgoingIdx].r;
+    var outDefR = thinRadius(outgoingIdx, songFocus); /* where the outgoing level lands as a thin ring */
     var oRIn = donutLerp(DONUT_RIN, outDefR - 3, eased);
     var oROut = donutLerp(DONUT_ROUT, outDefR + 3, eased);
     if (oROut - oRIn < 6){ var m = (oRIn + oROut) / 2; oRIn = m - 3; oROut = m + 3; }
@@ -1183,8 +1213,9 @@ function renderDonut(){
   if (donutDrag && donutDrag.held && donutDrag.targetLevel){
     var tIdx = songFocus + donutDrag.targetLevel;
     if (tIdx >= 0 && tIdx < RING_DEFS.length){
-      svgD.appendChild(el("circle", { "class": "donut-thin-target", cx: CX, cy: CY, r: RING_DEFS[tIdx].r }));
-      var tl = el("text", { "class": "donut-level-label", x: CX, y: CY - RING_DEFS[tIdx].r - 10 });
+      var tRad = thinRadius(tIdx, songFocus);
+      svgD.appendChild(el("circle", { "class": "donut-thin-target", cx: CX, cy: CY, r: tRad }));
+      var tl = el("text", { "class": "donut-level-label", x: CX, y: CY - tRad - 10 });
       tl.textContent = donutDrag.targetLevel < 0 ? "Shorter loop \u00b7 " + RING_DEFS[tIdx].label : "Longer loop \u00b7 " + RING_DEFS[tIdx].label;
       svgD.appendChild(tl);
     }
@@ -1786,7 +1817,7 @@ function frame(){
     for (var ti = 0; ti < thinDotEls.length; ti++){
       var td = thinDotEls[ti];
       var ta = norm360(bp / td.def.beats * 360);
-      var tp = polar(td.def.r, ta);
+      var tp = polar(td.r != null ? td.r : td.def.r, ta);
       td.el.setAttribute("cx", tp[0]); td.el.setAttribute("cy", tp[1]);
     }
   }
