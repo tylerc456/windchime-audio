@@ -216,7 +216,7 @@
 
       <main class="stage-area">
         <div class="stage-card">
-          <div id="donutWrap" hidden>
+          <div id="donutWrap">
             <div class="donut-stage" id="donutStage">
               <svg id="donutSvg" viewBox="0 0 640 640" role="img" aria-label="New song donut, divided into sections. Tap a section to add a pad sample or record from the microphone."></svg>
               <div class="center-readout">
@@ -226,7 +226,7 @@
               <div class="countin" id="countIn" hidden><span id="countInNum">4</span></div>
             </div>
           </div>
-          <div class="stage" id="stage">
+          <div class="stage" id="stage" style="display:none">
             <svg id="stageSvg" viewBox="0 0 640 640" role="img" aria-label="Concentric loop rings. Tap an empty ring to record, drag a waveform to roll it or move it to another ring.">
               <g id="zoomGroup"><line class="downbeat-bar" x1="320" y1="320" x2="320" y2="4" /></g>
             </svg>
@@ -244,7 +244,7 @@
           <span class="dock-cap">Split</span>
         </div>
         <div class="dock-item">
-          <button class="round-btn dock-round play" id="playBtn" aria-label="Pause">❚❚</button>
+          <button class="round-btn dock-round play" id="playBtn" aria-label="Play">▶</button>
           <span class="dock-cap">Play / pause</span>
         </div>
         <div class="dock-item">
@@ -344,8 +344,8 @@
 
       <section class="panel">
         <h2>How it works</h2>
-        <p class="hint" id="hint"><b>Tap</b> an empty ring to record a take into it — pick a demo sound in this menu first if you want a kick, snare or tap on that ring. <b>Drag</b> a waveform to roll it around its ring and line its start up with the top — it <b>snaps to the red bar</b> when you get close, so quantizing is just “roll until it clicks.” <b>Drag it onto another ring</b> and let go — you’ll get the big Tile / Move / Copy choice. The <b>red bar</b> at the top is where every ring’s section starts and ends, and each waveform’s <b>beginning</b> — the start of the slice, not its loudest point — is drawn as a <b>red segment</b>, so you align beginnings, not peaks. The dot on each ring is its playhead: the centre ring laps in 1 beat, the next in 2, then 4, 8… The round <b>Split</b> button under the stage chops the selected ring’s take into 1, 2, 4, 8 or 16 independently rolling slices.</p>
-        <p class="hint" id="donutHint" hidden>This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
+        <p class="hint" id="hint" style="display:none"><b>Tap</b> an empty ring to record a take into it — pick a demo sound in this menu first if you want a kick, snare or tap on that ring. <b>Drag</b> a waveform to roll it around its ring and line its start up with the top — it <b>snaps to the red bar</b> when you get close, so quantizing is just “roll until it clicks.” <b>Drag it onto another ring</b> and let go — you’ll get the big Tile / Move / Copy choice. The <b>red bar</b> at the top is where every ring’s section starts and ends, and each waveform’s <b>beginning</b> — the start of the slice, not its loudest point — is drawn as a <b>red segment</b>, so you align beginnings, not peaks. The dot on each ring is its playhead: the centre ring laps in 1 beat, the next in 2, then 4, 8… The round <b>Split</b> button under the stage chops the selected ring’s take into 1, 2, 4, 8 or 16 independently rolling slices.</p>
+        <p class="hint" id="donutHint">This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
       </section>
 
       <p class="menu-note"><b>About this mockup:</b> it runs entirely in your browser. There’s no microphone yet — tapping a ring simulates a Koala-style take and synthesises a sound for that ring (hi-hat on the 1-beat, kick on the 2, groove on the 4, bass on the 8, chords beyond) — or use the demo-sound picker to put a kick, snare, tap, bass or chords on any ring you like — so you can feel the interaction model: ring = loop length, drag = roll, drag across rings = Tile / Move / Copy, chop = slice and roll each piece on its own. A production version would swap the simulated takes for real mic input and an audio engine underneath the same interface.</p>
@@ -401,7 +401,7 @@ function makeSample(ringIdx, opts){
 }
 var rings = RING_DEFS.map(function(){ return { status:"empty", sample:null, takes:null, takeIndex:0, muted:false, solo:false, recUntil:0 }; });
 
-var bpm = 96, playing = true;
+var bpm = 96, playing = false;
 var perfBase = performance.now(), beatBase = 0;   /* visual clock */
 function beatPos(){ return playing ? beatBase + (performance.now()-perfBase)/(60000/bpm) : beatBase; }
 function setBpm(n){
@@ -1270,7 +1270,20 @@ function frame(){
   requestAnimationFrame(frame);
 }
 setBpm(96);
+/* Open straight onto the donut new-song builder, paused — rings are reached via Menu → Back to rings,
+   and New song brings the donut back. */
+songMode = true;
+songFocus = 3;
+songSel = 0;
+segCount = 4;
+songSegments = [null, null, null, null];
+setPlaying(false);
+$("donutWrap").hidden = false;
+$("stage").style.display = "none";
+$("hint").style.display = "none";
+$("donutHint").hidden = false;
 renderAll();
+renderDonut();
 requestAnimationFrame(frame);
 </script>
 </body>
