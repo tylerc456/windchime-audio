@@ -349,7 +349,7 @@
       <section class="panel">
         <h2>How it works</h2>
         <p class="hint" id="hint" style="display:none"><b>Tap</b> an empty ring to record a take into it — pick a demo sound in this menu first if you want a kick, snare or tap on that ring. <b>Drag</b> a waveform to roll it around its ring and line its start up with the top — it <b>snaps to the red bar</b> when you get close, so quantizing is just “roll until it clicks.” <b>Drag it onto another ring</b> and let go — you’ll get the big Tile / Move / Copy choice. The <b>red bar</b> at the top is where every ring’s section starts and ends, and each waveform’s <b>beginning</b> — the start of the slice, not its loudest point — is drawn as a <b>red segment</b>, so you align beginnings, not peaks. The dot on each ring is its playhead: the centre ring laps in 1 beat, the next in 2, then 4, 8… The round <b>Split</b> button under the stage chops the selected ring’s take into 1, 2, 4, 8 or 16 independently rolling slices.</p>
-        <p class="hint" id="donutHint">This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. <b>Press and hold</b> a filled section to select it, then <b>drag inside the section</b> to roll the waveform — the red start segment moves with your drag and <b>snaps to the section’s start edge</b> when you get close. <b>Drag onto another section</b> instead and letting go offers <b>Move / Copy</b> for that sample. To shift a sample to a <b>different level</b>, tap its section and choose <b>Move / copy to the shorter or longer loop</b> — or, while holding it, <b>pull inwards</b> for the loop half as long or <b>push outwards</b> for the loop twice as long and let go. Moving <b>up</b> keeps the sample’s real length and lands it at the same beat in the longer loop; moving <b>down</b> splits or fits it to the shorter cycle. Either way the view switches to the level it landed in, and that level keeps it when you focus away and back with the <b>shorter / longer</b> controls. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
+        <p class="hint" id="donutHint">This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. <b>Press and hold</b> a filled section to select it, then <b>drag inside the section</b> to roll the waveform — the red start segment moves with your drag and <b>snaps to the section’s start edge</b> when you get close. <b>Drag onto another section</b> instead and letting go offers <b>Move / Copy</b> for that sample. To shift a sample to a <b>different level</b>, tap its section and choose <b>Move / copy to the shorter or longer loop</b> — or, while holding it, <b>pull inwards</b> for the loop half as long or <b>push outwards</b> for the loop twice as long and let go. Moving <b>up</b> keeps the sample’s real length and lands it at the same beat in the longer loop; moving <b>down</b> splits or fits it to the shorter cycle. The loop it lands in is also <b>re-split so a segment lasts the same</b> there — shifting down from a 4-segment loop reveals a <b>2-segment</b> ring, shifting up reveals <b>8</b> — unless filled sections on that loop sit beyond the smaller split, in which case it keeps its split and the sample lands using that count. Either way the view switches to the level it landed in, and that level keeps it when you focus away and back with the <b>shorter / longer</b> controls. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
       </section>
 
       <p class="menu-note"><b>About this mockup:</b> it runs entirely in your browser. There’s no microphone yet — tapping a ring simulates a Koala-style take and synthesises a sound for that ring (hi-hat on the 1-beat, kick on the 2, groove on the 4, bass on the 8, chords beyond) — or use the demo-sound picker to put a kick, snare, tap, bass or chords on any ring you like — so you can feel the interaction model: ring = loop length, drag = roll, drag across rings = Tile / Move / Copy, chop = slice and roll each piece on its own. A production version would swap the simulated takes for real mic input and an audio engine underneath the same interface.</p>
@@ -1236,10 +1236,27 @@ function donutPeaksSlice(seg, k, n){
   var len = seg.peaks.length, a = Math.floor(k * len / n), b = Math.max(a + 1, Math.floor((k + 1) * len / n));
   return seg.peaks.slice(a, b);
 }
+/* Safety gate for rescaling a level's split: growing never drops a section, but
+   shrinking to newCount would drop any filled section sitting at or beyond it. */
+function canRescaleLevel(toLevelIdx, newCount){
+  var lvl = songLevels[toLevelIdx];
+  if (newCount >= lvl.segCount) return true;
+  for (var i = newCount; i < lvl.segments.length; i++) if (lvl.segments[i]) return false;
+  return true;
+}
 function levelPlan(fromSegIdx, toLevelIdx){
   saveFocusLevel();
   var fromLevelIdx = songFocus;
-  var srcSegCount = segCount, tgtSegCount = songLevels[toLevelIdx].segCount;
+  var srcSegCount = segCount;
+  /* The target loop's split scales with the cycle length so a segment lasts the
+     same there as here: shifting down to the half-length loop halves the count
+     (4 segments become 2), shifting up to the double-length loop doubles it
+     (4 become 8). If that rescale would drop a filled section on the target
+     loop, the target keeps its current count and the landing below is planned
+     with that count instead — so the chooser preview and the landing agree. */
+  var desiredSegCount = Math.max(1, Math.min(16, Math.round(srcSegCount * RING_DEFS[toLevelIdx].beats / RING_DEFS[fromLevelIdx].beats)));
+  var rescale = canRescaleLevel(toLevelIdx, desiredSegCount);
+  var tgtSegCount = rescale ? desiredSegCount : songLevels[toLevelIdx].segCount;
   var srcBeats = RING_DEFS[fromLevelIdx].beats, tgtBeats = RING_DEFS[toLevelIdx].beats;
   var srcSegBeats = srcBeats / srcSegCount, tgtSegBeats = tgtBeats / tgtSegCount;
   var seg = songSegments[fromSegIdx];
@@ -1262,13 +1279,26 @@ function levelPlan(fromSegIdx, toLevelIdx){
   }
   return { fromLevelIdx: fromLevelIdx, toLevelIdx: toLevelIdx, isUp: isUp,
     srcSegBeats: srcSegBeats, tgtSegBeats: tgtSegBeats, tgtIdx: tgtIdx, tgtRoll: tgtRoll,
-    nSplit: nSplit, occupiedNames: occupiedNames };
+    nSplit: nSplit, occupiedNames: occupiedNames,
+    newSegCount: desiredSegCount, rescale: rescale, tgtSegCount: tgtSegCount };
 }
 function doLevelTransfer(fromSegIdx, toLevelIdx, mode, plan){
   var seg = songSegments[fromSegIdx]; if (!seg) return;
   plan = plan || levelPlan(fromSegIdx, toLevelIdx);
   var source = cloneSeg(seg);
-  var tgtSegs = songLevels[toLevelIdx].segments;
+  /* Apply the planned rescale first, so the sample lands in a target loop that
+     already has the new segment count the plan was computed with. Sections
+     inside the new count keep their places; the safety check in levelPlan
+     guarantees nothing filled sits beyond a smaller new count. */
+  var lvl = songLevels[toLevelIdx];
+  var countChanged = false;
+  if (plan.rescale && plan.newSegCount !== lvl.segCount){
+    var resized = [];
+    for (var q = 0; q < plan.newSegCount; q++) resized.push(q < lvl.segments.length ? lvl.segments[q] : null);
+    lvl.segments = resized; lvl.segCount = plan.newSegCount;
+    countChanged = true;
+  }
+  var tgtSegs = lvl.segments;
   for (var j = 0; j < plan.nSplit; j++){
     var ns = cloneSeg(source);
     if (plan.nSplit > 1){
@@ -1278,7 +1308,7 @@ function doLevelTransfer(fromSegIdx, toLevelIdx, mode, plan){
     } else {
       ns.rollDeg = plan.tgtRoll;
     }
-    tgtSegs[(plan.tgtIdx + j) % songLevels[toLevelIdx].segCount] = ns;
+    tgtSegs[(plan.tgtIdx + j) % lvl.segCount] = ns;
   }
   if (mode !== "copy"){
     songSegments[fromSegIdx] = null;
@@ -1290,7 +1320,8 @@ function doLevelTransfer(fromSegIdx, toLevelIdx, mode, plan){
   renderDonut();
   toast((mode === "copy" ? "Copied" : "Moved") + " to the " + RING_DEFS[toLevelIdx].label + " loop — section " + (landed + 1) +
     (plan.nSplit > 1 ? ", split across " + plan.nSplit + " sections to fit the shorter cycle"
-      : plan.isUp ? ", at the same beat, real length kept" : ", fitted to the shorter cycle"));
+      : plan.isUp ? ", at the same beat, real length kept" : ", fitted to the shorter cycle") +
+    (countChanged ? " · that loop now has " + lvl.segCount + " segments, so each segment lasts the same" : ""));
 }
 function offerLevelTransfer(fromSegIdx, toLevelIdx, snapshot){
   var seg = songSegments[fromSegIdx]; if (!seg) return;
@@ -1301,9 +1332,19 @@ function offerLevelTransfer(fromSegIdx, toLevelIdx, snapshot){
     ? "Split across " + plan.nSplit + " sections of the " + RING_DEFS[toLevelIdx].label + " loop, starting in section " + (plan.tgtIdx + 1) + ", so it fits the shorter cycle"
     : "Land in section " + (plan.tgtIdx + 1) + " of the " + RING_DEFS[toLevelIdx].label + " loop — the corresponding position (same beat)" +
       (plan.isUp ? ", with its real length preserved" : ", fitted to the shorter cycle");
+  var curTgtCount = songLevels[toLevelIdx].segCount;
+  var splitNote;
+  if (!plan.rescale)
+    splitNote = " It keeps its current " + curTgtCount + " segments — filled sections there sit beyond a " +
+      plan.newSegCount + "-segment split, so the split stays as it is and the landing uses it.";
+  else if (plan.newSegCount !== curTgtCount)
+    splitNote = " Its split becomes " + plan.newSegCount + " segment" + (plan.newSegCount === 1 ? "" : "s") +
+      ", so each segment lasts the same as one here.";
+  else
+    splitNote = " Its split stays at " + curTgtCount + " segments.";
   showChooser((plan.isUp ? "Shift up to the " : "Shift down to the ") + RING_DEFS[toLevelIdx].label + " loop?",
     "“" + seg.name + "” is in section " + (fromSegIdx + 1) + " of the " + RING_DEFS[songFocus].label + " loop. The " +
-    RING_DEFS[toLevelIdx].label + " loop is " + (plan.isUp ? "twice as long" : "half as long") + "." +
+    RING_DEFS[toLevelIdx].label + " loop is " + (plan.isUp ? "twice as long" : "half as long") + "." + splitNote +
     (plan.occupiedNames.length ? " This replaces " + plan.occupiedNames.join(" and ") + " there." : "") +
     " After the shift, the view switches to that " + dirWord + " loop so you can see where it landed.",
     [
