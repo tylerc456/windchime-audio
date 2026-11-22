@@ -985,6 +985,18 @@ var songFocus = 3; /* RING_DEFS index: the 4-beat loop */
    songSegments / segCount above are always the focused level's live view of this. */
 var songLevels = RING_DEFS.map(function(){ return { segCount: 4, segments: [null, null, null, null] }; });
 songLevels[songFocus].segments = songSegments;
+/* Rolling zoom animation state: when focus changes, the incoming ring rolls
+   from its thin-line radius into the wide band and the outgoing ring rolls
+   from the wide band out to its thin line. */
+var donutAnim = null;
+var DONUT_ANIM_MS = 560;
+function donutEase(t){ return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+function donutAnimRaw(){
+  if (!donutAnim) return 1;
+  var t = (performance.now() - donutAnim.start) / donutAnim.dur;
+  return t < 0 ? 0 : (t > 1 ? 1 : t);
+}
+function donutLerp(a, b, t){ return a + (b - a) * t; }
 function saveFocusLevel(){
   if (songLevels[songFocus]){ songLevels[songFocus].segCount = segCount; songLevels[songFocus].segments = songSegments; }
 }
@@ -1009,6 +1021,11 @@ function loadFocusLevel(idx){
   segCount = songLevels[idx].segCount;
   songSegments = songLevels[idx].segments;
   if (songSel >= segCount) songSel = 0;
+  /* start the rolling zoom: incoming rolls from its thin radius into the
+     band, outgoing rolls from the band out to its thin radius */
+  var reduceMotion = false;
+  try { reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+  donutAnim = reduceMotion ? null : { from: prevFocus, to: idx, start: performance.now(), dur: DONUT_ANIM_MS };
 }
 var songSel = 0, songMode = false, micBusy = false;
 var DONUT_RIN = 138, DONUT_ROUT = 224, DONUT_RMID = (DONUT_RIN + DONUT_ROUT) / 2;
@@ -1037,17 +1054,26 @@ function renderDonut(){
   var svgD = $("donutSvg");
   while (svgD.firstChild) svgD.removeChild(svgD.firstChild);
   thinDotEls = [];
-  /* other lengths stay thin lines — only the focused loop is expanded.
-     A line with filled sections shows each one as a red arc spanning that
-     section, plus a rotating dot for that level's playback position. */
-  RING_DEFS.forEach(function(def, i){
-    if (i === songFocus) return;
+  var rawT = donutAnim ? donutAnimRaw() : 1;
+  var eased = donutAnim ? donutEase(rawT) : 1;
+  var isAnim = !!donutAnim && rawT < 1;
+  var outgoingIdx = isAnim ? donutAnim.from : -1;
+  if (donutAnim && rawT >= 1) donutAnim = null;
+  var curRIn = DONUT_RIN, curROut = DONUT_ROUT, curRMid = DONUT_RMID;
+  if (isAnim){
+    var inDefR = RING_DEFS[songFocus].r;
+    curRIn = donutLerp(inDefR - 3, DONUT_RIN, eased);
+    curROut = donutLerp(inDefR + 3, DONUT_ROUT, eased);
+    if (curROut - curRIn < 6){ var midTmp = (curRIn + curROut) / 2; curRIn = midTmp - 3; curROut = midTmp + 3; }
+    curRMid = (curRIn + curROut) / 2;
+  }
+  function drawThinLevel(i){
+    var def = RING_DEFS[i];
     var lvl = songLevels[i];
     var lvlSegs = lvl ? lvl.segments : [];
     var lvlCount = lvl ? lvl.segCount : 4;
     var filled = lvlSegs ? lvlSegs.filter(Boolean).length : 0;
-    var isLevelTarget = !!(donutDrag && donutDrag.held && donutDrag.targetLevel &&
-      ((donutDrag.targetLevel < 0 && i === songFocus - 1) || (donutDrag.targetLevel > 0 && i === songFocus + 1)));
+    var isLevelTarget = !!(donutDrag && donutDrag.held && donutDrag.targetLevel && ((donutDrag.targetLevel < 0 && i === songFocus - 1) || (donutDrag.targetLevel > 0 && i === songFocus + 1)));
     svgD.appendChild(el("circle", { "class": isLevelTarget ? "donut-thin-target" : "donut-thin", cx: CX, cy: CY, r: def.r }));
     if (filled){
       var stepL = 360 / lvlCount, gapL = Math.min(2.5, stepL * 0.09);
@@ -1066,12 +1092,33 @@ function renderDonut(){
     }
     var lp = polar(def.r, 180);
     var t = el("text", { "class": isLevelTarget ? "donut-level-label" : "donut-thin-label", x: lp[0], y: CY + def.r + 14 });
-    t.textContent = isLevelTarget
-      ? (donutDrag.targetLevel < 0 ? "Release — shorter loop (" + def.label + ")" : "Release — longer loop (" + def.label + ")")
-      : def.label + (filled ? " · " + filled + " filled" : "");
+    t.textContent = isLevelTarget ? (donutDrag.targetLevel < 0 ? "Release \u2014 shorter loop (" + def.label + ")" : "Release \u2014 longer loop (" + def.label + ")") : def.label + (filled ? " \u00b7 " + filled + " filled" : "");
     svgD.appendChild(t);
-  });
-  /* the focused donut: segCount sections, section 1 starts at the top red bar */
+  }
+  function drawOutgoingBand(){
+    if (!isAnim || outgoingIdx < 0 || outgoingIdx === songFocus) return;
+    var lvlOut = songLevels[outgoingIdx];
+    if (!lvlOut) return;
+    var outDefR = RING_DEFS[outgoingIdx].r;
+    var oRIn = donutLerp(DONUT_RIN, outDefR - 3, eased);
+    var oROut = donutLerp(DONUT_ROUT, outDefR + 3, eased);
+    if (oROut - oRIn < 6){ var m = (oRIn + oROut) / 2; oRIn = m - 3; oROut = m + 3; }
+    var stepO = 360 / lvlOut.segCount, gapO = Math.min(2.5, stepO * 0.09);
+    for (var ko = 0; ko < lvlOut.segCount; ko++){
+      var segO = lvlOut.segments[ko];
+      var a0o = ko * stepO + gapO, a1o = (ko + 1) * stepO - gapO;
+      svgD.appendChild(el("path", { "class": "donut-seg " + (segO ? "donut-seg-full" : "donut-seg-empty"), d: sectorPath(oRIn, oROut, a0o, a1o) }));
+      if (segO && !segO.recording && segO.peaks){
+        var fIn = oRIn + 6, fOut = oROut - 6;
+        if (fOut > fIn){
+          var rollO = ((segO.rollDeg || 0) % stepO + stepO) % stepO;
+          var sAo = ko * stepO + rollO;
+          svgD.appendChild(el("path", { "class": "donut-float", d: sectorPath(fIn, fOut, sAo + 1, sAo + stepO - 1) }));
+        }
+      }
+    }
+  }
+  drawOutgoingBand();
   var step = 360 / segCount, gap = Math.min(2.5, step * 0.09), inset = Math.min(7, step * 0.16);
   for (var k = 0; k < segCount; k++){
     (function(k){
@@ -1079,24 +1126,20 @@ function renderDonut(){
       var seg = songSegments[k];
       var isDrop = !!(donutDrag && donutDrag.held && donutDrag.target === k && donutDrag.from !== k);
       var isHeld = !!(donutDrag && donutDrag.held && donutDrag.from === k);
-      var path = el("path", { "class": "donut-seg " + (seg ? "donut-seg-full" : "donut-seg-empty") + (k === songSel ? " donut-seg-sel" : "") + (isDrop ? " drop-target" : "") + (isHeld ? " held" : ""), d: sectorPath(DONUT_RIN, DONUT_ROUT, a0, a1) });
+      var path = el("path", { "class": "donut-seg " + (seg ? "donut-seg-full" : "donut-seg-empty") + (k === songSel ? " donut-seg-sel" : "") + (isDrop ? " drop-target" : "") + (isHeld ? " held" : ""), d: sectorPath(curRIn, curROut, a0, a1) });
       path.addEventListener("click", function(){ if (suppressDonutClick){ suppressDonutClick = false; return; } tapSegment(k); });
       svgD.appendChild(path);
       if (seg && seg.recording){
-        var midR = polar(DONUT_RMID, k * step + step / 2);
+        var midR = polar(curRMid, k * step + step / 2);
         var subR = el("text", { "class": "donut-seg-sub", x: midR[0], y: midR[1] + 4 });
-        subR.textContent = "● Recording…";
+        subR.textContent = "\u25cf Recording\u2026";
         svgD.appendChild(subR);
       }
-      /* floating samples are drawn in a second pass, on top of all sections,
-         so a dragged sample can slide across dividers smoothly */
     })(k);
   }
-  /* second pass: floating samples — waveform inside a low-opacity red curved
-     rectangle, inset inside its container section. At rest its start is the
-     section start + rollDeg; while held it follows floatDisplay continuously. */
   (function(){
-    var fRIn = DONUT_RIN + 10, fROut = DONUT_ROUT - 10;
+    var fRIn = curRIn + 10, fROut = curROut - 10;
+    if (fROut <= fRIn){ fRIn = curRIn + 2; fROut = curROut - 2; }
     var fGap = Math.min(2, step * 0.06);
     var fInset = Math.min(6, step * 0.14);
     for (var kk = 0; kk < segCount; kk++){
@@ -1109,46 +1152,49 @@ function renderDonut(){
       svgD.appendChild(el("path", { "class": "donut-float" + (isDragged ? " dragging" : ""), d: sectorPath(fRIn, fROut, startA + fGap, endA - fGap) }));
       var barsF = segCount > 8 ? 8 : (segCount > 4 ? 12 : 16), wdF = "";
       var spanF = step - fGap * 2 - fInset * 2;
+      var waveAmp = Math.max(4, Math.min(15, (curROut - curRIn) * 0.18));
       for (var j = 0; j < barsF; j++){
         var f = barsF === 1 ? 0 : j / (barsF - 1);
         var amp = sg.peaks[Math.min(sg.peaks.length - 1, Math.floor(f * sg.peaks.length))];
         var aF = startA + fGap + fInset + f * spanF;
-        var q1 = polar(DONUT_RMID - amp * 15, aF), q2 = polar(DONUT_RMID + amp * 15, aF);
+        var q1 = polar(curRMid - amp * waveAmp, aF), q2 = polar(curRMid + amp * waveAmp, aF);
         wdF += "M" + q1[0].toFixed(1) + " " + q1[1].toFixed(1) + "L" + q2[0].toFixed(1) + " " + q2[1].toFixed(1);
       }
       svgD.appendChild(el("path", { "class": "seg-wave", d: wdF }));
       var aRedF = startA + fGap + fInset;
       var ampS = sg.peaks[0];
-      var r1 = polar(DONUT_RMID - ampS * 15, aRedF), r2 = polar(DONUT_RMID + ampS * 15, aRedF);
+      var r1 = polar(curRMid - ampS * waveAmp, aRedF), r2 = polar(curRMid + ampS * waveAmp, aRedF);
       svgD.appendChild(el("path", { "class": "seg-wave-start", d: "M" + r1[0].toFixed(1) + " " + r1[1].toFixed(1) + "L" + r2[0].toFixed(1) + " " + r2[1].toFixed(1) }));
       if (segCount <= 8){
-        var midF = polar(DONUT_RMID, startA + step / 2);
-        /* keep the name readable: place it opposite the waveform centre when floating crosses the top */
+        var midF = polar(curRMid, startA + step / 2);
         var subF = el("text", { "class": "donut-seg-sub", x: midF[0], y: midF[1] + 4 });
         subF.textContent = sg.name;
-        /* only show the label when not dragging far from home, to avoid clutter while sliding */
         if (!isDragged) svgD.appendChild(subF);
       }
     }
   })();
+  RING_DEFS.forEach(function(def, i){
+    if (i === songFocus) return;
+    if (isAnim && i === outgoingIdx) return;
+    drawThinLevel(i);
+  });
   var barEl = el("line", { "class": "downbeat-bar", x1: CX, y1: CY, x2: CX, y2: 4 });
   svgD.appendChild(barEl);
-  /* re-draw the aimed-at adjacent level on top of the donut, so the pull-in / push-out
-     target stays visible even where its thin line runs underneath the wide donut */
   if (donutDrag && donutDrag.held && donutDrag.targetLevel){
     var tIdx = songFocus + donutDrag.targetLevel;
     if (tIdx >= 0 && tIdx < RING_DEFS.length){
       svgD.appendChild(el("circle", { "class": "donut-thin-target", cx: CX, cy: CY, r: RING_DEFS[tIdx].r }));
       var tl = el("text", { "class": "donut-level-label", x: CX, y: CY - RING_DEFS[tIdx].r - 10 });
-      tl.textContent = donutDrag.targetLevel < 0 ? "Shorter loop · " + RING_DEFS[tIdx].label : "Longer loop · " + RING_DEFS[tIdx].label;
+      tl.textContent = donutDrag.targetLevel < 0 ? "Shorter loop \u00b7 " + RING_DEFS[tIdx].label : "Longer loop \u00b7 " + RING_DEFS[tIdx].label;
       svgD.appendChild(tl);
     }
   }
-  var hp = polar(DONUT_RMID, 0);
-  svgD.appendChild(el("circle", { "id": "donutHead", "class": "playhead", cx: hp[0], cy: hp[1], r: 7 }));
+  var hp = polar(curRMid, 0);
+  var headEl = el("circle", { "id": "donutHead", "class": "playhead", cx: hp[0], cy: hp[1], r: 7 });
+  headEl.setAttribute("data-rmid", curRMid);
+  svgD.appendChild(headEl);
   var def = RING_DEFS[songFocus];
-  $("focusLabel").textContent = "Focus: " + def.label + " loop · other lengths are thin lines · " +
-    songSegments.filter(Boolean).length + " of " + segCount + " sections filled";
+  $("focusLabel").textContent = "Focus: " + def.label + " loop \u00b7 other lengths are thin lines \u00b7 " + songSegments.filter(Boolean).length + " of " + segCount + " sections filled";
   updateSplitLabel();
 }
 function tapSegment(k){
@@ -1586,6 +1632,7 @@ donutStageEl.addEventListener("pointercancel", function(e){
 
 function startNewSong(){
   songLevels = RING_DEFS.map(function(){ return { segCount: 4, segments: [null, null, null, null] }; });
+  donutAnim = null;
   songFocus = 3; songSel = 0; songMode = true;
   segCount = songLevels[songFocus].segCount;
   songSegments = songLevels[songFocus].segments;
@@ -1680,25 +1727,33 @@ function splitChooser(){
 }
 $("splitBtn").addEventListener("click", splitChooser);
 
-/* donut playback: each filled section sounds inside the focused loop */
+/* donut playback: every level's filled sections sound together, each looping
+   at its own cycle length, regardless of which level is in focus */
 var donutLastBeat = 0;
 setInterval(function(){
   if (!actx || !playing || !songMode) { donutLastBeat = beatPos(); return; }
   var ahead = beatPos() + 0.15, spb = 60 / bpm, now = actx.currentTime;
   if (ahead < donutLastBeat) donutLastBeat = ahead;
-  var loopBeats = RING_DEFS[songFocus].beats, segBeats = loopBeats / segCount;
-  songSegments.forEach(function(seg, k){
-    if (!seg || seg.recording || !seg.kind) return;
-    var rollBeats = ((seg.rollDeg || 0) / 360) * loopBeats; /* rolled start shifts the hits inside their section */
-    genHits(seg.kind, Math.max(segBeats, 0.25)).forEach(function(h){
-      var hb = k * segBeats + ((rollBeats + h.beat) % segBeats);
-      var occ = Math.floor((donutLastBeat - hb) / loopBeats) * loopBeats + hb;
-      for (; occ <= ahead; occ += loopBeats){
-        if (occ > donutLastBeat){
-          var t = now + (occ - beatPos()) * spb;
-          if (t >= now - 0.05) playHit(h.sound, Math.max(t, now), h.freq);
+  songLevels.forEach(function(lvl, levelIdx){
+    if (!lvl || !lvl.segments) return;
+    var isFocused = (levelIdx === songFocus);
+    var lvlSegs = isFocused ? songSegments : lvl.segments;
+    var lvlCount = isFocused ? segCount : lvl.segCount;
+    if (!lvlSegs || !lvlCount) return;
+    var loopBeats = RING_DEFS[levelIdx].beats, segBeats = loopBeats / lvlCount;
+    lvlSegs.forEach(function(seg, k){
+      if (!seg || seg.recording || !seg.kind) return;
+      var rollBeats = ((seg.rollDeg || 0) / 360) * loopBeats; /* rolled start shifts the hits inside their section */
+      genHits(seg.kind, Math.max(segBeats, 0.25)).forEach(function(h){
+        var hb = k * segBeats + ((rollBeats + h.beat) % segBeats);
+        var occ = Math.floor((donutLastBeat - hb) / loopBeats) * loopBeats + hb;
+        for (; occ <= ahead; occ += loopBeats){
+          if (occ > donutLastBeat){
+            var t = now + (occ - beatPos()) * spb;
+            if (t >= now - 0.05) playHit(h.sound, Math.max(t, now), h.freq);
+          }
         }
-      }
+      });
     });
   });
   donutLastBeat = ahead;
@@ -1716,10 +1771,14 @@ function frame(){
       ringEls[i].rec.setAttribute("transform", "rotate(" + (bp * 140 % 360) + " " + CX + " " + CY + ")");
   });
   if (songMode){
+    /* drive the rolling zoom: re-render the donut each frame while it animates
+       so both bands roll smoothly; renderDonut clears donutAnim when done */
+    if (donutAnim) renderDonut();
     var dh = document.getElementById("donutHead");
     if (dh){
       var da = norm360(bp / RING_DEFS[songFocus].beats * 360);
-      var dp = polar(DONUT_RMID, da);
+      var rMidNow = parseFloat(dh.getAttribute("data-rmid") || DONUT_RMID);
+      var dp = polar(rMidNow, da);
       dh.setAttribute("cx", dp[0]); dh.setAttribute("cy", dp[1]);
     }
     /* dots on collapsed lines: angle follows beat position in that level's
