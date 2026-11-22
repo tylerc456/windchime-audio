@@ -1,0 +1,1277 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Eoeo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <style>
+      :root{
+        --bg:#ffffff; --ink:#101010; --ink-soft:#3d3d3d; --muted:#767676;
+        --line:#101010; --hair:#e3e3e3; --panel:#f6f6f4; --panel-line:#dcdcd8;
+        --empty-ring:rgba(16,16,16,.28); --wave-dim:rgba(16,16,16,.4);
+        --rec:#d92323; --btn-ink:#ffffff;
+        --shadow:0 10px 30px rgba(0,0,0,.08);
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#0b0b0b; --ink:#f4f4f2; --ink-soft:#cfcfcb; --muted:#9a9a94;
+          --line:#f4f4f2; --hair:#262624; --panel:#151514; --panel-line:#2b2b28;
+          --empty-ring:rgba(244,244,242,.3); --wave-dim:rgba(244,244,242,.4);
+          --rec:#ff5a4e; --btn-ink:#0b0b0b; --shadow:0 10px 30px rgba(0,0,0,.5);
+        }
+      }
+      *{ box-sizing:border-box; }
+      html,body{ margin:0; padding:0; height:100%; }
+      body{
+        background:var(--bg); color:var(--ink); overflow:hidden;
+        font-family:"Archivo", system-ui, sans-serif;
+        -webkit-font-smoothing:antialiased;
+      }
+      button{ font-family:inherit; cursor:pointer; min-height:2.75rem; }
+      .mono{ font-family:"IBM Plex Mono", ui-monospace, monospace; }
+      .app{ display:flex; flex-direction:column; height:100dvh; }
+
+      /* top bar */
+      header.topbar{ display:flex; align-items:center; gap:12px; padding:10px 14px 2px; flex:0 0 auto; }
+      .brand{ display:flex; align-items:center; gap:10px; }
+      .logo{ width:38px; height:auto; flex:0 0 auto; fill:var(--ink); }
+      .logo .eye{ fill:var(--bg); }
+      .wordmark{ font-weight:800; font-size:25px; letter-spacing:.14em; line-height:1; }
+      .proto-badge{ font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+        border:1.5px solid var(--line); border-radius:999px; padding:6px 11px; white-space:nowrap; }
+      @media (max-width:520px){ .proto-badge{ display:none; } }
+
+      /* centred stage — sized to fit between top bar and dock, so the page never scrolls */
+      .stage-area{ flex:1 1 auto; min-height:0; display:grid; place-items:center; padding:6px 12px; }
+      .stage-card{ width:min(94vw, calc(100dvh - 218px), 600px); }
+
+      /* round buttons + dock */
+      .round-btn{ border-radius:50%; border:2px solid var(--line); background:var(--bg); color:var(--ink);
+        display:grid; place-items:center; padding:0; flex:0 0 auto; }
+      .round-btn:active{ transform:scale(.96); }
+      .menu-btn{ width:48px; height:48px; min-height:48px; font-size:20px; margin-left:auto; }
+      .dock{ flex:0 0 auto; display:flex; justify-content:center; align-items:flex-start; gap:clamp(20px,7vw,44px);
+        padding:8px 12px calc(12px + env(safe-area-inset-bottom)); }
+      .dock-item{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+      .dock-round{ width:74px; height:74px; min-height:74px; box-shadow:var(--shadow); }
+      .dock-round.play{ width:92px; height:92px; min-height:92px; background:var(--ink); color:var(--btn-ink); font-size:30px; }
+      .dock-round .tap-word{ font-weight:800; font-size:17px; letter-spacing:.08em; }
+      #splitCount{ font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:30px; line-height:1; }
+      .dock-cap{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+      @media (max-height:520px){
+        .dock-round{ width:56px; height:56px; min-height:56px; }
+        .dock-round.play{ width:68px; height:68px; min-height:68px; font-size:24px; }
+        #splitCount{ font-size:23px; }
+        .stage-card{ width:min(94vw, calc(100dvh - 172px), 600px); }
+        .logo{ width:30px; } .wordmark{ font-size:20px; }
+      }
+
+      /* slide-over menu — everything that isn't Split / Play / Tap lives here */
+      #menuScrim{ position:fixed; inset:0; background:rgba(0,0,0,.42); z-index:44; }
+      #menuPanel{ position:fixed; top:0; right:0; height:100dvh; width:min(372px,94vw); z-index:45;
+        background:var(--bg); border-left:1.5px solid var(--line); box-shadow:var(--shadow);
+        overflow-y:auto; padding:16px 16px calc(20px + env(safe-area-inset-bottom));
+        transform:translateX(103%); transition:transform .25s ease; }
+      #menuPanel[hidden]{ display:none; }
+      #menuPanel.open{ transform:none; }
+      .menu-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+      .menu-head h2{ font-size:20px; font-weight:800; margin:0; }
+      .menu-close{ width:44px; height:44px; min-height:44px; font-size:17px; }
+      .menu-row{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+      .menu-note{ color:var(--muted); font-size:13px; line-height:1.6; }
+      .menu-note b{ color:var(--ink-soft); }
+      .fb-label{ font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--ink-soft); }
+      @media (prefers-reduced-motion: reduce){ #menuPanel{ transition:none; } }
+
+      /* transport bits (now inside the menu) */
+      .bpm-box{ display:flex; align-items:center; gap:8px; }
+      .bpm-num{ font-family:"IBM Plex Mono",monospace; font-size:34px; font-weight:600; line-height:1; min-width:2.4ch; text-align:right; }
+      .bpm-unit{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); line-height:1.25; }
+      .tbtn{ border:1.5px solid var(--line); background:var(--bg); color:var(--ink); border-radius:12px;
+        padding:8px 14px; font-weight:700; font-size:14px; }
+      .tbtn:active{ transform:scale(.97); }
+      .tbtn.dark{ background:var(--ink); color:var(--btn-ink); }
+      .tbtn.small{ padding:8px 10px; font-family:"IBM Plex Mono",monospace; }
+      .beat-dots{ display:flex; gap:7px; align-items:center; padding:0 4px; }
+      .beat-dots span{ width:11px; height:11px; border-radius:50%; border:1.5px solid var(--line); display:block; }
+      .beat-dots span.on{ background:var(--ink); }
+      .spacer{ flex:1 1 auto; }
+      .zoom-ctl{ display:flex; align-items:center; gap:8px; }
+      .zoom-label{ font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); min-width:11ch; text-align:center; }
+
+      .stage-card{ border:1.5px solid var(--line); border-radius:22px; background:var(--bg); box-shadow:var(--shadow); overflow:hidden; }
+      .stage{ position:relative; width:100%; aspect-ratio:1/1; touch-action:none; user-select:none; -webkit-user-select:none; }
+      .stage svg{ display:block; width:100%; height:100%; }
+      .center-readout{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); text-align:center; pointer-events:none; width:34%; }
+      .center-readout .cr-big{ font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:clamp(17px,3.4vw,26px); line-height:1.1; }
+      .center-readout .cr-small{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-top:4px; }
+      .hint{ font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 10px; }
+      .hint:last-child{ margin-bottom:0; }
+      .hint b{ color:var(--ink); }
+
+      /* side panels */
+      .panel{ border:1.5px solid var(--line); border-radius:18px; background:var(--bg); box-shadow:var(--shadow); padding:16px; margin-bottom:18px; }
+      .panel h2{ font-size:13px; letter-spacing:.16em; text-transform:uppercase; margin:0 0 4px; }
+      .panel .sub{ color:var(--muted); font-size:13px; margin:0 0 12px; line-height:1.45; }
+      .sel-name{ font-size:21px; font-weight:800; line-height:1.15; }
+      .sel-meta{ font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--ink-soft); margin-top:4px; line-height:1.6; }
+      .btn-row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+      .btn-row .tbtn{ flex:1 1 auto; }
+      .chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+      .chip{ border:1.5px solid var(--line); background:var(--bg); color:var(--ink); border-radius:999px; padding:6px 13px; font-size:13px; font-weight:700; min-height:2.4rem; }
+      .chip[aria-pressed="true"]{ background:var(--ink); color:var(--btn-ink); }
+
+      .layer-row{ display:flex; align-items:center; gap:10px; padding:10px 2px; border-top:1px solid var(--hair); }
+      .layer-row:first-of-type{ border-top:none; }
+      .layer-row.selected{ background:var(--panel); border-radius:12px; padding-left:8px; padding-right:8px; }
+      .lr-beats{ font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:14px; width:52px; flex:0 0 auto; }
+      .lr-main{ flex:1 1 auto; min-width:0; }
+      .lr-name{ font-weight:700; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .lr-note{ font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .ms-btn{ width:40px; height:40px; min-height:40px; border-radius:10px; border:1.5px solid var(--line);
+        background:var(--bg); color:var(--ink); font-weight:800; font-size:13px; flex:0 0 auto; padding:0; }
+      .ms-btn[aria-pressed="true"]{ background:var(--ink); color:var(--btn-ink); }
+      .ms-btn:disabled{ opacity:.3; cursor:default; }
+      .take-btn{ font-family:"IBM Plex Mono",monospace; font-size:11.5px; border:1.5px solid var(--line); border-radius:999px;
+        background:var(--bg); color:var(--ink); padding:5px 10px; min-height:2.2rem; flex:0 0 auto; }
+
+      footer.note{ margin-top:22px; color:var(--muted); font-size:13px; line-height:1.6; max-width:75ch; }
+      footer.note b{ color:var(--ink-soft); }
+
+      /* toast */
+      #toast{ position:fixed; left:50%; bottom:22px; transform:translate(-50%,80px); background:var(--ink); color:var(--btn-ink);
+        padding:12px 20px; border-radius:999px; font-size:14px; font-weight:600; max-width:92vw; text-align:center;
+        transition:transform .25s ease; z-index:60; pointer-events:none; }
+      #toast.show{ transform:translate(-50%,0); }
+
+      /* full-screen chooser */
+      #overlay{ position:fixed; inset:0; z-index:50; background:var(--bg); display:flex; flex-direction:column;
+        padding:max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+      #overlay[hidden]{ display:none; }
+      #overlay h2{ font-size:clamp(24px,5vw,36px); font-weight:800; margin:8px 4px 2px; line-height:1.1; }
+      #overlay .ov-sub{ color:var(--ink-soft); margin:0 4px 16px; font-size:15px; line-height:1.45; }
+      .ov-buttons{ display:flex; flex-direction:column; gap:12px; flex:1 1 auto; }
+      .ov-btn{ flex:1 1 0; border:2px solid var(--line); border-radius:24px; background:var(--bg); color:var(--ink);
+        display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:4px;
+        padding:18px 22px; text-align:left; min-height:76px; }
+      .ov-btn .ov-label{ font-size:clamp(22px,4.5vw,30px); font-weight:800; line-height:1.05; }
+      .ov-btn .ov-desc{ font-size:14px; color:var(--ink-soft); font-weight:500; line-height:1.35; }
+      .ov-btn.primary{ background:var(--ink); color:var(--btn-ink); }
+      .ov-btn.primary .ov-desc{ color:var(--btn-ink); opacity:.75; }
+      .ov-btn:active{ transform:scale(.99); }
+
+      /* svg bits */
+      .ring-track{ fill:none; stroke:var(--empty-ring); stroke-width:2; }
+      .ring.full .ring-track{ stroke:var(--line); stroke-width:3; }
+      .ring.selected .ring-track{ stroke-width:5; }
+      .ring.drop-target .ring-track{ stroke:var(--line); stroke-width:6; stroke-dasharray:10 8; }
+      .ring.inaudible .wave, .ring.inaudible .playhead{ opacity:.3; }
+      .ring-hit{ fill:none; stroke:transparent; stroke-width:34; pointer-events:stroke; cursor:pointer; }
+      .downbeat-bar{ stroke:var(--rec); stroke-width:4; stroke-linecap:round; pointer-events:none; }
+      .wave{ fill:none; stroke:var(--line); stroke-width:2.6; stroke-linecap:round; pointer-events:none; }
+      .wave.peak{ stroke:var(--rec); stroke-width:4.6; }
+      .wave.slice-dim{ stroke:var(--wave-dim); }
+      .wave.slice-sel{ stroke-width:4.2; }
+      .playhead{ fill:var(--line); stroke:var(--bg); stroke-width:2; pointer-events:none; }
+      .ring-label{ font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:600; fill:var(--ink); text-anchor:middle; pointer-events:none; paint-order:stroke; stroke:var(--bg); stroke-width:4px; stroke-linejoin:round; }
+      .rec-arc{ fill:none; stroke:var(--rec); stroke-width:5; stroke-linecap:round; pointer-events:none; }
+      .rec-dot{ fill:var(--rec); pointer-events:none; }
+      /* donut song builder */
+      .donut-stage{ position:relative; width:100%; aspect-ratio:1/1; touch-action:none; user-select:none; -webkit-user-select:none; }
+      .donut-stage svg{ display:block; width:100%; height:100%; }
+      .donut-seg{ cursor:pointer; }
+      .donut-seg-empty{ fill:var(--panel); stroke:var(--line); stroke-width:2; }
+      .donut-seg-full{ fill:var(--bg); stroke:var(--line); stroke-width:2.5; }
+      .donut-seg-sel{ stroke:var(--rec); stroke-width:4; }
+      .donut-thin{ fill:none; stroke:var(--empty-ring); stroke-width:2; pointer-events:none; }
+      .donut-thin-label{ font-family:"IBM Plex Mono",monospace; font-size:12px; fill:var(--muted); text-anchor:middle; pointer-events:none; }
+      .donut-seg-label{ font-family:"IBM Plex Mono",monospace; font-size:15px; font-weight:600; fill:var(--ink); text-anchor:middle; pointer-events:none; }
+      .donut-seg-sub{ font-family:"Archivo",sans-serif; font-size:12px; font-weight:700; fill:var(--ink-soft); text-anchor:middle; pointer-events:none; }
+      .seg-wave{ fill:none; stroke:var(--line); stroke-width:2.4; stroke-linecap:round; pointer-events:none; }
+      .seg-wave-start{ fill:none; stroke:var(--rec); stroke-width:5; stroke-linecap:round; pointer-events:none; }
+      .countin{ position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; }
+      .countin span{ font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:clamp(64px,16vw,120px); color:var(--rec); background:var(--bg); border:2px solid var(--rec); border-radius:50%; width:1.9em; height:1.9em; display:grid; place-items:center; }
+      @media (prefers-reduced-motion: reduce){ #toast{ transition:none; } }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <svg class="logo" viewBox="0 0 120 120" role="img" aria-label="Eoeo logo — Pinocchio silhouette, head and shoulders">
+            <path d="M63 24 C60 12 66 3 78 1 C77 12 72 21 68 26 Z"/>
+            <path d="M12 120 C15 103 27 94 43 89 C38 81 35 71 36 60 L28 54 C34 36 48 25 62 26 C75 27 83 35 84 45 L93 50 C86 53 83 56 82.5 59 L115 67 C116.5 68 116.5 70.5 114.5 71.5 L83 72 C85 78 82 84 75 86 C69 88 66 90 66 94 C84 97 101 105 109 120 Z"/>
+            <circle class="eye" cx="70" cy="60" r="2.6"/>
+          </svg>
+          <div class="wordmark">EOEO</div>
+        </div>
+        <div class="proto-badge">Interactive prototype</div>
+        <button class="round-btn menu-btn" id="menuBtn" aria-label="Open menu">☰</button>
+      </header>
+
+      <main class="stage-area">
+        <div class="stage-card">
+          <div id="donutWrap" hidden>
+            <div class="donut-stage" id="donutStage">
+              <svg id="donutSvg" viewBox="0 0 640 640" role="img" aria-label="New song donut, divided into sections. Tap a section to add a pad sample or record from the microphone."></svg>
+              <div class="center-readout">
+                <div class="cr-big" id="donutCrBig">4 beats</div>
+                <div class="cr-small" id="donutCrSmall">loop in focus · paused</div>
+              </div>
+              <div class="countin" id="countIn" hidden><span id="countInNum">4</span></div>
+            </div>
+          </div>
+          <div class="stage" id="stage">
+            <svg id="stageSvg" viewBox="0 0 640 640" role="img" aria-label="Concentric loop rings. Tap an empty ring to record, drag a waveform to roll it or move it to another ring.">
+              <g id="zoomGroup"><line class="downbeat-bar" x1="320" y1="320" x2="320" y2="4" /></g>
+            </svg>
+            <div class="center-readout">
+              <div class="cr-big" id="crBig">1 beat</div>
+              <div class="cr-small" id="crSmall">innermost ring</div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <div class="dock" role="group" aria-label="Main controls">
+        <div class="dock-item">
+          <button class="round-btn dock-round" id="splitBtn" aria-label="Split — choose how many segments the focused loop has"><span id="splitCount">4</span></button>
+          <span class="dock-cap">Split</span>
+        </div>
+        <div class="dock-item">
+          <button class="round-btn dock-round play" id="playBtn" aria-label="Pause">❚❚</button>
+          <span class="dock-cap">Play / pause</span>
+        </div>
+        <div class="dock-item">
+          <button class="round-btn dock-round" id="tapBtn" aria-label="Tap tempo"><span class="tap-word">TAP</span></button>
+          <span class="dock-cap">Tap tempo</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="menuScrim" hidden></div>
+    <aside id="menuPanel" aria-label="Menu" hidden>
+      <div class="menu-head">
+        <h2>Menu</h2>
+        <button class="round-btn menu-close" id="menuClose" aria-label="Close menu">✕</button>
+      </div>
+      <p class="menu-note" style="margin-top:0;">A looper where the ring <em>is</em> the loop length. Tap a ring to record into it — no separate “set to repeat” step. The three round buttons under the stage are the ones you perform with; everything else lives here.</p>
+
+      <section class="panel">
+        <h2>Tempo</h2>
+        <p class="sub">Tap tempo is the round button under the stage — or nudge the tempo here.</p>
+        <div class="menu-row">
+          <div class="bpm-box">
+            <button class="tbtn small" id="bpmDown" aria-label="Tempo down">−</button>
+            <div>
+              <div class="bpm-num" id="bpmNum">96</div>
+              <div class="bpm-unit">BPM · beats<br/>per minute</div>
+            </div>
+            <button class="tbtn small" id="bpmUp" aria-label="Tempo up">+</button>
+          </div>
+          <div class="beat-dots" id="beatDots" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Zoom</h2>
+        <p class="sub">Pinch the stage, scroll on it, or use these — zoom brings shorter or longer rings into view.</p>
+        <div class="zoom-ctl">
+          <button class="tbtn small" id="zoomOut" aria-label="Zoom out — show longer rings">−</button>
+          <div class="zoom-label" id="zoomLabel">1–8 beats</div>
+          <button class="tbtn small" id="zoomIn" aria-label="Zoom in — show shorter rings">+</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Song</h2>
+        <p class="sub">Start a new song on the sectioned donut, load the demo loop, or clear everything. In the song builder, focus a shorter or longer loop here.</p>
+        <div class="btn-row" style="margin-top:0;">
+          <button class="tbtn dark" id="newSongBtn">＋ New song</button>
+          <button class="tbtn" id="demoBtn">Demo loop</button>
+          <button class="tbtn" id="clearBtn">Clear all</button>
+        </div>
+        <div class="btn-row">
+          <button class="tbtn small" id="focusDown" aria-label="Focus a shorter loop">◀ shorter</button>
+          <button class="tbtn small" id="focusUp" aria-label="Focus a longer loop">longer ▶</button>
+          <button class="tbtn" id="backToRings">Back to rings</button>
+        </div>
+        <p class="fb-label" id="focusLabel" style="margin:10px 0 0;">Focus: 4-beat loop · other lengths are thin lines</p>
+      </section>
+
+          <section class="panel">
+            <h2>Demo sound</h2>
+            <p class="sub">Pick the sound the next take uses, then tap any empty ring to record it there — a kick, snare or tap on whichever ring you want.</p>
+            <div class="chips" id="soundChips" role="group" aria-label="Demo sound for the next take">
+              <button class="chip" data-kind="" aria-pressed="true">Auto · by ring</button>
+              <button class="chip" data-kind="kick" aria-pressed="false">Kick</button>
+              <button class="chip" data-kind="snare" aria-pressed="false">Snare</button>
+              <button class="chip" data-kind="hat" aria-pressed="false">Hi-hat</button>
+              <button class="chip" data-kind="tick" aria-pressed="false">Tap</button>
+              <button class="chip" data-kind="bass" aria-pressed="false">Bass</button>
+              <button class="chip" data-kind="chords" aria-pressed="false">Chords</button>
+            </div>
+          </section>
+
+          <section class="panel" id="selPanel" aria-live="polite">
+            <h2>Selected ring</h2>
+            <p class="sub" id="selEmpty">Nothing selected. Tap a ring on the stage.</p>
+            <div id="selBody" hidden>
+              <div class="sel-name" id="selName">—</div>
+              <div class="sel-meta" id="selMeta">—</div>
+              <div class="chips" id="sliceChips" hidden></div>
+              <div class="btn-row">
+                <button class="tbtn" id="rollBack">⟲ Roll −15°</button>
+                <button class="tbtn" id="rollFwd">Roll +15° ⟳</button>
+              </div>
+              <div class="btn-row">
+                <button class="tbtn dark" id="chopBtn">Chop…</button>
+                <button class="tbtn" id="clearRingBtn">Clear ring</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Layers</h2>
+            <p class="sub">Every populated ring plays together. Mute or solo each layer — solo wins, mute always silences.</p>
+            <div id="layers"></div>
+          </section>
+
+      <section class="panel">
+        <h2>How it works</h2>
+        <p class="hint" id="hint"><b>Tap</b> an empty ring to record a take into it — pick a demo sound in this menu first if you want a kick, snare or tap on that ring. <b>Drag</b> a waveform to roll it around its ring and line its start up with the top — it <b>snaps to the red bar</b> when you get close, so quantizing is just “roll until it clicks.” <b>Drag it onto another ring</b> and let go — you’ll get the big Tile / Move / Copy choice. The <b>red bar</b> at the top is where every ring’s section starts and ends, and each waveform’s <b>beginning</b> — the start of the slice, not its loudest point — is drawn as a <b>red segment</b>, so you align beginnings, not peaks. The dot on each ring is its playhead: the centre ring laps in 1 beat, the next in 2, then 4, 8… The round <b>Split</b> button under the stage chops the selected ring’s take into 1, 2, 4, 8 or 16 independently rolling slices.</p>
+        <p class="hint" id="donutHint" hidden>This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
+      </section>
+
+      <p class="menu-note"><b>About this mockup:</b> it runs entirely in your browser. There’s no microphone yet — tapping a ring simulates a Koala-style take and synthesises a sound for that ring (hi-hat on the 1-beat, kick on the 2, groove on the 4, bass on the 8, chords beyond) — or use the demo-sound picker to put a kick, snare, tap, bass or chords on any ring you like — so you can feel the interaction model: ring = loop length, drag = roll, drag across rings = Tile / Move / Copy, chop = slice and roll each piece on its own. A production version would swap the simulated takes for real mic input and an audio engine underneath the same interface.</p>
+    </aside>
+
+    <div id="overlay" hidden>
+      <h2 id="ovTitle">Choose</h2>
+      <p class="ov-sub" id="ovSub"></p>
+      <div class="ov-buttons" id="ovButtons"></div>
+    </div>
+
+    <div id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* ============ model ============ */
+var CX = 320, CY = 320;
+var RING_DEFS = [
+  { beats: 0.5, label: "½ beat",  r: 44  },
+  { beats: 1,   label: "1 beat",  r: 86  },
+  { beats: 2,   label: "2 beats", r: 128 },
+  { beats: 4,   label: "4 beats", r: 170 },
+  { beats: 8,   label: "8 beats", r: 212 },
+  { beats: 16,  label: "16 beats", r: 254 },
+  { beats: 32,  label: "32 beats", r: 296 }
+];
+var KIND_BY_BEATS = { "0.5":"tick", "1":"hat", "2":"kick", "4":"backbeat", "8":"bass", "16":"chords", "32":"pad" };
+var KIND_NAME = { tick:"Rim tick", hat:"Hi-hat tap", kick:"Kick pulse", snare:"Snare crack", backbeat:"Kit groove", bass:"Bass line", chords:"Chord wash", pad:"Pad drone" };
+var pendingKind = ""; /* demo-sound picker: "" = auto by ring */
+
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; var t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function genPeaks(seed, n){
+  var rnd = mulberry32(seed), out = [], v = 0.4;
+  for (var i=0;i<n;i++){ v = Math.max(0.08, Math.min(1, v + (rnd()-0.5)*0.55)); out.push(v); }
+  for (var k=0;k<n;k+=8) out[k] = Math.min(1, out[k]+0.35); /* accents on the grid */
+  return out;
+}
+var seedCounter = 7;
+function makeSample(ringIdx, opts){
+  opts = opts || {};
+  var def = RING_DEFS[ringIdx];
+  var kind = opts.kind || KIND_BY_BEATS[String(def.beats)];
+  return {
+    kind: kind,
+    name: opts.name || KIND_NAME[kind],
+    peaks: opts.peaks || genPeaks(seedCounter++ * 131 + ringIdx * 17, 72),
+    startDeg: opts.startDeg || 0,      /* where the take sits in its ring */
+    spanDeg: (opts.spanDeg == null ? 360 : opts.spanDeg),
+    offsetDeg: 0,                       /* whole-take roll */
+    slices: null,                       /* null = unchopped; else [{roll}] */
+    selSlice: 0
+  };
+}
+var rings = RING_DEFS.map(function(){ return { status:"empty", sample:null, takes:null, takeIndex:0, muted:false, solo:false, recUntil:0 }; });
+
+var bpm = 96, playing = true;
+var perfBase = performance.now(), beatBase = 0;   /* visual clock */
+function beatPos(){ return playing ? beatBase + (performance.now()-perfBase)/(60000/bpm) : beatBase; }
+function setBpm(n){
+  var b = beatPos(); bpm = Math.max(40, Math.min(200, Math.round(n)));
+  beatBase = b; perfBase = performance.now();
+  document.getElementById("bpmNum").textContent = bpm;
+}
+function setPlaying(p){
+  var b = beatPos(); playing = p; beatBase = b; perfBase = performance.now();
+  var btn = document.getElementById("playBtn");
+  btn.textContent = playing ? "❚❚" : "▶";
+  btn.setAttribute("aria-label", playing ? "Pause" : "Play");
+}
+
+/* ============ audio (synthesised takes) ============ */
+var actx = null, master = null;
+function ensureAudio(){
+  if (actx) { if (actx.state === "suspended") actx.resume(); return; }
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain(); master.gain.value = 0.5; master.connect(actx.destination);
+  } catch(e){ actx = null; }
+}
+function noiseBuffer(){
+  var len = actx.sampleRate * 0.5, buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
+  for (var i=0;i<len;i++) d[i] = Math.random()*2-1;
+  return buf;
+}
+var _noise = null;
+function playNoise(t, dur, filterType, freq, gain){
+  if (!_noise) _noise = noiseBuffer();
+  var src = actx.createBufferSource(); src.buffer = _noise;
+  var f = actx.createBiquadFilter(); f.type = filterType; f.frequency.value = freq;
+  var g = actx.createGain();
+  g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+  src.connect(f); f.connect(g); g.connect(master); src.start(t); src.stop(t+dur+0.02);
+}
+function playTone(t, type, f0, f1, dur, gain){
+  var o = actx.createOscillator(); o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20,f1), t+dur*0.7);
+  var g = actx.createGain();
+  g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t+dur+0.02);
+}
+function playHit(sound, t, freq){
+  if (!actx) return;
+  if (sound === "hat") playNoise(t, 0.06, "highpass", 7000, 0.20);
+  else if (sound === "tick") playTone(t, "square", 1800, 1200, 0.04, 0.10);
+  else if (sound === "kick") playTone(t, "sine", 150, 45, 0.24, 0.85);
+  else if (sound === "snare"){ playNoise(t, 0.14, "bandpass", 1800, 0.32); playTone(t, "triangle", 190, 120, 0.09, 0.2); }
+  else if (sound === "bass") playTone(t, "sawtooth", freq || 55, freq || 55, 0.32, 0.30);
+  else if (sound === "chord"){ (freq || [220, 261.6, 329.6]).forEach(function(fr){ playTone(t, "triangle", fr, fr, 0.9, 0.10); }); }
+}
+/* hits for one phrase of phraseBeats, as offsets in beats */
+function genHits(kind, phraseBeats){
+  var hits = [], b, cyc, i;
+  function cyc4(fn){ for (var s=0; s<phraseBeats; s+=4) fn(s); }
+  if (kind === "tick") hits.push({ beat:0, sound:"tick" });
+  else if (kind === "hat"){ for (b=0; b<phraseBeats; b+=0.5) hits.push({ beat:b, sound:"hat" }); }
+  else if (kind === "kick"){ for (b=0; b<phraseBeats; b+=1){ hits.push({ beat:b, sound: b%2===0 ? "kick" : "hat" }); } }
+  else if (kind === "snare") cyc4(function(s){
+    hits.push({beat:s+1,sound:"snare"},{beat:s+3,sound:"snare"});
+  });
+  else if (kind === "backbeat") cyc4(function(s){
+    hits.push({beat:s,sound:"kick"},{beat:s+1,sound:"snare"},{beat:s+2,sound:"kick"},{beat:s+3,sound:"snare"});
+    for (i=0;i<4;i+=0.5) hits.push({ beat:s+i+0.25, sound:"hat" });
+  });
+  else if (kind === "bass") cyc4(function(s){
+    hits.push({beat:s,sound:"bass",freq:55},{beat:s+1.5,sound:"bass",freq:55},
+              {beat:s+2,sound:"bass",freq:65.41},{beat:s+3.5,sound:"bass",freq:49});
+  });
+  else if (kind === "chords") cyc4(function(s){
+    hits.push({beat:s,sound:"chord",freq:[220,261.63,329.63]},{beat:s+2,sound:"chord",freq:[174.61,220,261.63]});
+  });
+  else if (kind === "mic"){ hits.push({ beat:0, sound:"snare" }); for (b=0.5; b<phraseBeats; b+=0.5) hits.push({ beat:b, sound:"hat" }); }
+  else if (kind === "pad") hits.push({ beat:0, sound:"chord", freq:[110,164.81,220] });
+  return hits.filter(function(h){ return h.beat < phraseBeats || phraseBeats <= 0.5; });
+}
+function anySolo(){ return rings.some(function(r){ return r.status==="full" && r.solo; }); }
+function audible(i){ var r = rings[i]; if (r.status!=="full" || r.muted) return false; return !anySolo() || r.solo; }
+
+var lastSchedBeat = 0;
+setInterval(function(){
+  if (!actx || !playing) { lastSchedBeat = beatPos(); return; }
+  var ahead = beatPos() + 0.15;
+  if (ahead < lastSchedBeat) lastSchedBeat = ahead; /* tempo jump safety */
+  var spb = 60/bpm, now = actx.currentTime;
+  rings.forEach(function(r, i){
+    if (!audible(i) || !r.sample) return;
+    var def = RING_DEFS[i], s = r.sample;
+    var spanBeats = s.spanDeg/360 * def.beats;
+    var startBeats = (((s.startDeg + s.offsetDeg) % 360) + 360) % 360 / 360 * def.beats;
+    genHits(s.kind, Math.max(spanBeats, 0.25)).forEach(function(h){
+      var hb = startBeats + h.beat;
+      var k = Math.floor((lastSchedBeat - hb)/def.beats);
+      for (var occ = k*def.beats + hb; occ <= ahead; occ += def.beats){
+        if (occ > lastSchedBeat){
+          var t = now + (occ - beatPos()) * spb;
+          if (t >= now - 0.05) playHit(h.sound, Math.max(t, now), h.freq);
+        }
+      }
+    });
+  });
+  lastSchedBeat = ahead;
+}, 40);
+</script>
+<script>
+"use strict";
+/* ============ stage rendering ============ */
+var SVGNS = "http://www.w3.org/2000/svg";
+function el(tag, attrs){ var e = document.createElementNS(SVGNS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function $(id){ return document.getElementById(id); }
+function polar(r, deg){ var rad = deg*Math.PI/180; return [CX + r*Math.sin(rad), CY - r*Math.cos(rad)]; }
+function norm360(d){ return ((d % 360) + 360) % 360; }
+/* Quantize snap: within 9° of the top (the red downbeat bar), an offset/roll clicks to 0
+   so the slice start lands exactly on the bar. */
+function snapToTop(deg){
+  var n = norm360(deg);
+  if (n <= 9) return deg - n;
+  if (n >= 351) return deg + (360 - n);
+  return deg;
+}
+
+var zoomGroup = $("zoomGroup");
+var ringEls = [];
+RING_DEFS.forEach(function(def, i){
+  var g = el("g", { "class": "ring", "data-i": i });
+  var track = el("circle", { "class": "ring-track", cx: CX, cy: CY, r: def.r });
+  var circ = 2*Math.PI*def.r;
+  var rec = el("circle", { "class": "rec-arc", cx: CX, cy: CY, r: def.r,
+    "stroke-dasharray": (circ*0.22) + " " + (circ*0.78), visibility: "hidden" });
+  var waveG = el("g", {});
+  var dotPos = polar(def.r, 0);
+  var head = el("circle", { "class": "playhead", cx: dotPos[0], cy: dotPos[1], r: 6.5 });
+  var label = el("text", { "class": "ring-label", x: CX, y: CY + def.r + 17 });
+  label.textContent = def.label;
+  var hit = el("circle", { "class": "ring-hit", cx: CX, cy: CY, r: def.r });
+  g.appendChild(track); g.appendChild(rec); g.appendChild(waveG);
+  g.appendChild(head); g.appendChild(label); g.appendChild(hit);
+  zoomGroup.appendChild(g);
+  ringEls.push({ g: g, track: track, rec: rec, waveG: waveG, head: head, label: label });
+});
+
+function segPeaks(s, k, n){
+  var len = s.peaks.length, a = Math.floor(k*len/n), b = Math.max(a+1, Math.floor((k+1)*len/n));
+  return s.peaks.slice(a, b);
+}
+function sliceSlots(s){
+  /* returns [{start, span, slice|null}] covering the take */
+  var base = norm360(s.startDeg + s.offsetDeg);
+  if (!s.slices) return [{ start: base, span: s.spanDeg, slice: null, idx: -1 }];
+  var out = [], acc = 0;
+  s.slices.forEach(function(sl, k){
+    var span = s.spanDeg * sl.frac;
+    out.push({ start: base + acc, span: span, slice: sl, idx: k });
+    acc += span;
+  });
+  return out;
+}
+function wavePath(s, def, slot){
+  var gap = s.slices ? 2.5 : 0;
+  var span = Math.max(6, slot.span - gap*2);
+  var start = slot.start + gap;
+  var seg = slot.idx < 0 ? s.peaks : segPeaks(s, slot.idx, s.slices.length);
+  var bars = Math.max(3, Math.round(64 * span/360));
+  var roll = slot.slice ? slot.slice.roll : 0;
+  var d = "", startD = "";
+  for (var j=0;j<bars;j++){
+    var f = bars === 1 ? 0 : j/(bars-1);
+    var srcF = ((f - roll/Math.max(span,1)) % 1 + 1) % 1;
+    var amp = seg[Math.min(seg.length-1, Math.floor(srcF*seg.length))];
+    var a = start + f*span;
+    var p1 = polar(def.r - amp*13, a), p2 = polar(def.r + amp*13, a);
+    var bar = "M" + p1[0].toFixed(1) + " " + p1[1].toFixed(1) + "L" + p2[0].toFixed(1) + " " + p2[1].toFixed(1);
+    d += bar;
+    /* red segment = the logical START of the slice (its first bar), not the loudest bar,
+       so rolling the red segment onto the red downbeat bar quantizes the slice start. */
+    if (j === 0) startD = bar;
+  }
+  return { d: d, peak: startD };
+}
+function renderWave(i){
+  var r = rings[i], def = RING_DEFS[i], wg = ringEls[i].waveG;
+  while (wg.firstChild) wg.removeChild(wg.firstChild);
+  if (r.status !== "full" || !r.sample) return;
+  var s = r.sample;
+  sliceSlots(s).forEach(function(slot){
+    var cls = "wave";
+    if (s.slices){ cls += (slot.idx === s.selSlice) ? " slice-sel" : " slice-dim"; }
+    var w = wavePath(s, def, slot);
+    wg.appendChild(el("path", { "class": cls, d: w.d }));
+    wg.appendChild(el("path", { "class": "wave peak", d: w.peak }));
+  });
+}
+function renderRingStates(){
+  rings.forEach(function(r, i){
+    var g = ringEls[i].g, cls = "ring";
+    if (r.status === "full") cls += " full";
+    if (i === selected) cls += " selected";
+    if (drag && drag.target === i && drag.from !== i) cls += " drop-target";
+    if (r.status === "full" && !audible(i)) cls += " inaudible";
+    g.setAttribute("class", cls);
+    ringEls[i].rec.setAttribute("visibility", r.status === "recording" ? "visible" : "hidden");
+  });
+}
+
+/* ============ toast + full-screen chooser ============ */
+var toastTimer = null;
+function toast(msg){
+  var t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 3200);
+}
+function showChooser(title, sub, buttons){
+  $("ovTitle").textContent = title;
+  $("ovSub").textContent = sub || "";
+  var box = $("ovButtons"); box.innerHTML = "";
+  buttons.forEach(function(b){
+    var btn = document.createElement("button");
+    btn.className = "ov-btn" + (b.primary ? " primary" : "");
+    var lab = document.createElement("span"); lab.className = "ov-label"; lab.textContent = b.label;
+    btn.appendChild(lab);
+    if (b.desc){ var d = document.createElement("span"); d.className = "ov-desc"; d.textContent = b.desc; btn.appendChild(d); }
+    btn.addEventListener("click", function(){ hideChooser(); if (b.action) b.action(); });
+    box.appendChild(btn);
+  });
+  $("overlay").hidden = false;
+}
+function hideChooser(){ $("overlay").hidden = true; }
+
+/* ============ selection + panels ============ */
+var selected = 1;
+function sampleMeta(i){
+  var r = rings[i], def = RING_DEFS[i];
+  if (r.status === "recording") return "Recording…";
+  if (r.status !== "full") return def.label + " ring · empty";
+  var s = r.sample, parts = [def.label + " ring", s.name];
+  if (s.spanDeg < 360) parts.push("covers " + Math.round(s.spanDeg/360*100) + "% of the ring");
+  if (s.offsetDeg) parts.push("rolled " + Math.round(norm360(s.offsetDeg)) + "°");
+  if (s.slices) parts.push(s.slices.length + " slices");
+  if (r.takes) parts.push("take " + (r.takeIndex+1) + " of " + r.takes.length);
+  return parts.join(" · ");
+}
+function renderSelPanel(){
+  var r = rings[selected], def = RING_DEFS[selected];
+  $("crBig").textContent = def.label;
+  $("crSmall").textContent = r.status === "full" ? r.sample.name : (r.status === "recording" ? "recording" : "empty ring");
+  var empty = r.status !== "full";
+  $("selEmpty").hidden = !empty;
+  $("selEmpty").textContent = r.status === "recording" ? "Recording a take on the " + def.label + " ring…"
+    : "The " + def.label + " ring is empty. Tap it on the stage to record a take.";
+  $("selBody").hidden = empty;
+  if (!empty){
+    $("selName").textContent = r.sample.name;
+    $("selMeta").textContent = sampleMeta(selected);
+    var chips = $("sliceChips"); chips.innerHTML = "";
+    if (r.sample.slices){
+      chips.hidden = false;
+      r.sample.slices.forEach(function(sl, k){
+        var c = document.createElement("button");
+        c.className = "chip"; c.textContent = "Slice " + (k+1);
+        c.setAttribute("aria-pressed", r.sample.selSlice === k ? "true" : "false");
+        c.addEventListener("click", function(){ r.sample.selSlice = k; renderAll(); });
+        chips.appendChild(c);
+      });
+      var hint = document.createElement("span");
+      hint.style.cssText = "font-size:12px;color:var(--muted);align-self:center;";
+      hint.textContent = "Roll buttons and drags turn the picked slice on its own.";
+      chips.appendChild(hint);
+    } else chips.hidden = true;
+  }
+}
+function renderLayers(){
+  var box = $("layers"); box.innerHTML = "";
+  RING_DEFS.forEach(function(def, i){
+    var r = rings[i];
+    var row = document.createElement("div");
+    row.className = "layer-row" + (i === selected ? " selected" : "");
+    var b = document.createElement("div"); b.className = "lr-beats"; b.textContent = def.label.replace(" beats","b").replace(" beat","b");
+    var main = document.createElement("div"); main.className = "lr-main";
+    var nm = document.createElement("div"); nm.className = "lr-name";
+    nm.textContent = r.status === "full" ? r.sample.name : (r.status === "recording" ? "● Recording…" : "Empty");
+    var nt = document.createElement("div"); nt.className = "lr-note";
+    nt.textContent = r.status === "full" ? sampleMeta(i) : "Tap the ring to record";
+    main.appendChild(nm); main.appendChild(nt);
+    row.appendChild(b); row.appendChild(main);
+    if (r.takes && r.takes.length > 1){
+      var tb = document.createElement("button");
+      tb.className = "take-btn"; tb.textContent = "Take " + (r.takeIndex+1) + "/" + r.takes.length + " ▸";
+      tb.setAttribute("aria-label", "Cycle takes on the " + def.label + " ring");
+      tb.addEventListener("click", function(){
+        r.takeIndex = (r.takeIndex + 1) % r.takes.length;
+        r.sample = r.takes[r.takeIndex]; selected = i; renderAll();
+        toast("Take " + (r.takeIndex+1) + " on the " + def.label + " ring");
+      });
+      row.appendChild(tb);
+    }
+    [["M","muted"],["S","solo"]].forEach(function(pair){
+      var btn = document.createElement("button");
+      btn.className = "ms-btn"; btn.textContent = pair[0];
+      btn.disabled = r.status !== "full";
+      btn.setAttribute("aria-pressed", r[pair[1]] ? "true" : "false");
+      btn.setAttribute("aria-label", pair[1] === "muted" ? "Mute " + def.label + " ring" : "Solo " + def.label + " ring");
+      btn.addEventListener("click", function(){ r[pair[1]] = !r[pair[1]]; renderAll(); });
+      row.appendChild(btn);
+    });
+    row.addEventListener("click", function(e){ if (e.target.tagName !== "BUTTON"){ selected = i; renderAll(); } });
+    box.appendChild(row);
+  });
+}
+function renderAll(){ RING_DEFS.forEach(function(_, i){ renderWave(i); }); renderRingStates(); renderSelPanel(); renderLayers(); updateSplitLabel(); }
+
+/* ============ recording (simulated take) ============ */
+function record(i){
+  var r = rings[i], def = RING_DEFS[i];
+  if (r.status !== "empty") return;
+  ensureAudio();
+  r.status = "recording"; selected = i; renderAll();
+  var dur = Math.min(Math.max(def.beats * (60000/bpm), 500), 2600);
+  setTimeout(function(){
+    if (r.status !== "recording") return;
+    r.status = "full"; r.sample = makeSample(i, pendingKind ? { kind: pendingKind } : {}); r.takes = null; r.takeIndex = 0;
+    r.muted = false; r.solo = false;
+    if (!playing) setPlaying(true);
+    renderAll();
+    toast(def.label + " ring: “" + r.sample.name + "” recorded" + (def.beats === 1 ? " — that tap sets the beat" : ""));
+  }, dur);
+}
+
+/* ============ transfers between rings ============ */
+function cloneSample(s){
+  return { kind: s.kind, name: s.name, peaks: s.peaks.slice(), startDeg: s.startDeg,
+    spanDeg: s.spanDeg, offsetDeg: s.offsetDeg,
+    slices: s.slices ? s.slices.map(function(sl){ return { roll: sl.roll, frac: sl.frac }; }) : null,
+    selSlice: s.selSlice };
+}
+function doTransfer(from, to, mode){
+  var src = rings[from], dst = rings[to], s = cloneSample(src.sample);
+  s.startDeg = norm360(s.startDeg + s.offsetDeg); s.offsetDeg = 0;
+  var ratio = RING_DEFS[to].beats / RING_DEFS[from].beats;
+  if (mode === "tile"){
+    s.spanDeg = 360; s.startDeg = 0; s.slices = null;
+    dst.sample = s; dst.takes = null; dst.takeIndex = 0;
+  } else if (ratio > 1){
+    /* preserve duration: sit in the corresponding slice of the longer ring */
+    s.spanDeg = 360 / ratio; s.startDeg = s.startDeg / ratio; s.slices = null;
+    dst.sample = s; dst.takes = null; dst.takeIndex = 0;
+  } else if (ratio < 1){
+    /* split into takes in the shorter band */
+    var n = Math.round(1/ratio), takes = [];
+    for (var k=0;k<n;k++){
+      var t = cloneSample(s);
+      t.peaks = segPeaks(s, k, n); t.spanDeg = 360; t.startDeg = 0; t.slices = null;
+      t.name = s.name + " · take " + (k+1);
+      takes.push(t);
+    }
+    dst.takes = takes; dst.takeIndex = 0; dst.sample = takes[0];
+  } else {
+    dst.sample = s; dst.takes = null; dst.takeIndex = 0;
+  }
+  dst.status = "full"; dst.muted = false; dst.solo = false;
+  if (mode !== "copy"){ src.status = "empty"; src.sample = null; src.takes = null; src.takeIndex = 0; }
+  selected = to; renderAll();
+  var verb = mode === "tile" ? "Tiled across" : (mode === "copy" ? "Copied to" : "Moved to");
+  toast(verb + " the " + RING_DEFS[to].label + " ring" + (mode !== "tile" && ratio < 1 ? " — split into " + Math.round(1/ratio) + " takes" : ""));
+}
+function offerTransfer(from, to, snapshot){
+  var sName = rings[from].sample.name;
+  showChooser("Move “" + sName + "”?",
+    "From the " + RING_DEFS[from].label + " ring to the " + RING_DEFS[to].label + " ring. The waveform reshapes to fit its new home.",
+    [
+      { label: "Move", primary: true,
+        desc: RING_DEFS[to].beats > RING_DEFS[from].beats
+          ? "Keep its real length — it sits in the matching part of the longer ring (the default)"
+          : "Split it into " + Math.round(RING_DEFS[from].beats / RING_DEFS[to].beats) + " takes in the shorter ring",
+        action: function(){ doTransfer(from, to, "move"); } },
+      { label: "Copy", desc: "Same move, but the original stays on the " + RING_DEFS[from].label + " ring too",
+        action: function(){ doTransfer(from, to, "copy"); } },
+      { label: "Tile", desc: "Repeat the take until it fills the whole " + RING_DEFS[to].label + " ring, and move it there",
+        action: function(){ doTransfer(from, to, "tile"); } },
+      { label: "Cancel", desc: "Put it back where it was",
+        action: function(){ rings[from].sample = snapshot; renderAll(); } }
+    ]);
+}
+
+/* ============ chop ============ */
+function applyChop(n, mode){
+  var r = rings[selected]; if (!r.sample) return;
+  var s = r.sample, slices = [], k;
+  if (mode === "auto"){
+    var total = s.peaks.reduce(function(a,v){ return a+v; }, 0), acc = 0, start = 0;
+    var bounds = [0];
+    for (var j=0;j<s.peaks.length;j++){
+      acc += s.peaks[j];
+      if (acc >= total * bounds.length / n && bounds.length < n){ bounds.push((j+1)/s.peaks.length); }
+    }
+    bounds.push(1);
+    for (k=1;k<bounds.length;k++) slices.push({ roll: 0, frac: Math.max(0.04, bounds[k]-bounds[k-1]) });
+    var sum = slices.reduce(function(a,sl){ return a+sl.frac; }, 0);
+    slices.forEach(function(sl){ sl.frac /= sum; });
+  } else {
+    for (k=0;k<n;k++) slices.push({ roll: 0, frac: 1/n });
+  }
+  s.slices = slices; s.selSlice = 0;
+  renderAll();
+  toast("Chopped into " + slices.length + " slices — pick a slice and roll it on its own");
+}
+function sliceCountChooser(mode){
+  var counts = [2,3,4,6,8];
+  var btns = counts.map(function(n){
+    return { label: n + " slices", primary: n === 4, desc: mode === "auto" ? "Cut on the loud moments" : "Even cuts",
+      action: function(){ applyChop(n, mode); } };
+  });
+  btns.push({ label: "Back", desc: "Choose a different chop", action: function(){ chopChooser(); } });
+  showChooser(mode === "auto" ? "Auto-chop" : "Manual chop", "How many slices?", btns);
+}
+function chopChooser(){
+  var r = rings[selected]; if (!r.sample) return;
+  showChooser("Chop “" + r.sample.name + "”",
+    "Sliced pieces can each be rolled around the ring independently, so you can nudge just the part that's off.",
+    [
+      { label: "Chop in half", primary: true, desc: "The default — one cut at the halfway point, 2 slices",
+        action: function(){ applyChop(2, "even"); } },
+      { label: "Auto-chop…", desc: "Slice at the loud moments — you'll pick how many",
+        action: function(){ sliceCountChooser("auto"); } },
+      { label: "Manual chop…", desc: "Even slices — you'll pick how many",
+        action: function(){ sliceCountChooser("even"); } },
+      { label: "Cancel", desc: "Leave the take whole", action: function(){} }
+    ]);
+}
+
+/* ============ pointer interaction: tap, roll-drag, cross-ring drag, pinch ============ */
+var stage = $("stage"), svg = $("stageSvg");
+var scale = 1.85, targetScale = 1.85;
+var pointers = new Map(), drag = null, pinch = null;
+
+function toLocal(e){
+  var rect = svg.getBoundingClientRect();
+  var x = (e.clientX - rect.left) / rect.width * 640;
+  var y = (e.clientY - rect.top) / rect.height * 640;
+  return [CX + (x - CX)/scale, CY + (y - CY)/scale];
+}
+function ringAt(p){
+  var d = Math.hypot(p[0]-CX, p[1]-CY), best = -1, bd = 1e9;
+  RING_DEFS.forEach(function(def, i){ var dd = Math.abs(d - def.r); if (dd < bd){ bd = dd; best = i; } });
+  return bd <= 22 ? best : -1;
+}
+function angleAt(p){ return norm360(Math.atan2(p[0]-CX, -(p[1]-CY)) * 180/Math.PI); }
+
+svg.addEventListener("pointerdown", function(e){
+  ensureAudio();
+  svg.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pointers.size === 2){
+    var pts = Array.from(pointers.values());
+    pinch = { d: Math.hypot(pts[0][0]-pts[1][0], pts[0][1]-pts[1][1]), s: targetScale };
+    drag = null; return;
+  }
+  var p = toLocal(e), i = ringAt(p);
+  if (i < 0) return;
+  var r = rings[i];
+  if (r.status === "empty"){ record(i); return; }
+  if (r.status !== "full") return;
+  selected = i;
+  var s = r.sample, a = angleAt(p);
+  var sliceIdx = null;
+  if (s.slices){
+    var rel = norm360(a - norm360(s.startDeg + s.offsetDeg));
+    if (rel < s.spanDeg){
+      var acc = 0;
+      for (var k=0;k<s.slices.length;k++){
+        var span = s.spanDeg * s.slices[k].frac;
+        if (rel >= acc && rel < acc + span){ sliceIdx = k; break; }
+        acc += span;
+      }
+    }
+    if (sliceIdx !== null) s.selSlice = sliceIdx;
+  }
+  drag = { from: i, target: i, lastAngle: a, moved: 0,
+    slice: sliceIdx, snapshot: cloneSample(s),
+    startOffset: s.offsetDeg, startRoll: sliceIdx !== null ? s.slices[sliceIdx].roll : 0 };
+  renderAll();
+});
+svg.addEventListener("pointermove", function(e){
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+  if (pinch && pointers.size === 2){
+    var pts = Array.from(pointers.values());
+    var d = Math.hypot(pts[0][0]-pts[1][0], pts[0][1]-pts[1][1]);
+    if (pinch.d > 0) targetScale = Math.max(0.95, Math.min(2.8, pinch.s * d / pinch.d));
+    return;
+  }
+  if (!drag) return;
+  var p = toLocal(e), a = angleAt(p);
+  var delta = ((a - drag.lastAngle + 540) % 360) - 180;
+  drag.lastAngle = a;
+  drag.moved += Math.abs(delta);
+  var s = rings[drag.from].sample;
+  if (drag.slice !== null && s.slices) s.slices[drag.slice].roll = snapToTop(s.slices[drag.slice].roll + delta);
+  else s.offsetDeg = snapToTop(s.offsetDeg + delta);
+  var t = ringAt(p);
+  drag.target = t >= 0 ? t : drag.from;
+  renderWave(drag.from); renderRingStates(); renderSelPanel();
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (!drag || pointers.size > 0) return;
+  var d = drag; drag = null;
+  renderRingStates();
+  if (d.moved > 5 && d.target !== d.from){
+    var dst = rings[d.target];
+    if (dst.status === "empty"){
+      offerTransfer(d.from, d.target, d.snapshot);
+    } else {
+      rings[d.from].sample = d.snapshot; renderAll();
+      toast(dst.status === "recording" ? "That ring is recording — drop somewhere empty"
+        : "The " + RING_DEFS[d.target].label + " ring already has a take — clear it first");
+    }
+  }
+}
+svg.addEventListener("pointerup", endPointer);
+svg.addEventListener("pointercancel", endPointer);
+stage.addEventListener("wheel", function(e){
+  e.preventDefault();
+  targetScale = Math.max(0.95, Math.min(2.8, targetScale * (e.deltaY < 0 ? 1.12 : 0.89)));
+}, { passive: false });
+
+/* ============ transport + panels wiring ============ */
+Array.prototype.forEach.call(document.querySelectorAll("#soundChips .chip"), function(chip){
+  chip.addEventListener("click", function(){
+    pendingKind = chip.getAttribute("data-kind") || "";
+    Array.prototype.forEach.call(document.querySelectorAll("#soundChips .chip"), function(c){
+      c.setAttribute("aria-pressed", c === chip ? "true" : "false");
+    });
+    toast(pendingKind ? "Next take: " + KIND_NAME[pendingKind] + " — tap an empty ring to record it"
+      : "Next take: automatic sound for the ring you tap");
+  });
+});
+$("playBtn").addEventListener("click", function(){ ensureAudio(); setPlaying(!playing); });
+$("bpmUp").addEventListener("click", function(){ setBpm(bpm + 1); });
+$("bpmDown").addEventListener("click", function(){ setBpm(bpm - 1); });
+var taps = [];
+$("tapBtn").addEventListener("click", function(){
+  ensureAudio();
+  var now = performance.now();
+  taps = taps.filter(function(t){ return now - t < 2200; });
+  taps.push(now);
+  if (taps.length >= 2){
+    var iv = (taps[taps.length-1] - taps[0]) / (taps.length - 1);
+    setBpm(60000 / iv);
+  }
+});
+function zoomLabelText(){
+  var vis = 320 / targetScale, seen = RING_DEFS.filter(function(d){ return d.r <= vis + 10; });
+  if (!seen.length) return "—";
+  return seen[0].label.replace(" beats","b").replace(" beat","b") + "–" +
+         seen[seen.length-1].label.replace(" beats","b").replace(" beat","b");
+}
+$("zoomIn").addEventListener("click", function(){ targetScale = Math.min(2.8, targetScale * 1.25); });
+$("zoomOut").addEventListener("click", function(){ targetScale = Math.max(0.95, targetScale / 1.25); });
+$("demoBtn").addEventListener("click", function(){
+  ensureAudio();
+  [1,2,3,4].forEach(function(i){
+    if (rings[i].status === "empty"){ rings[i].status = "full"; rings[i].sample = makeSample(i); }
+  });
+  selected = 3; setPlaying(true); renderAll();
+  toast("Demo loop loaded — hi-hat, kick, groove and bass, all playing together");
+});
+$("clearBtn").addEventListener("click", function(){
+  rings.forEach(function(r){ r.status = "empty"; r.sample = null; r.takes = null; r.takeIndex = 0; r.muted = false; r.solo = false; });
+  renderAll(); toast("All rings cleared");
+});
+function rollSelected(dir){
+  var r = rings[selected]; if (!r.sample) return;
+  var s = r.sample;
+  if (s.slices) s.slices[s.selSlice].roll = snapToTop(s.slices[s.selSlice].roll + dir * 15);
+  else s.offsetDeg = snapToTop(s.offsetDeg + dir * 15);
+  renderAll();
+}
+$("rollBack").addEventListener("click", function(){ rollSelected(-1); });
+$("rollFwd").addEventListener("click", function(){ rollSelected(1); });
+$("chopBtn").addEventListener("click", chopChooser);
+$("clearRingBtn").addEventListener("click", function(){
+  var r = rings[selected];
+  r.status = "empty"; r.sample = null; r.takes = null; r.takeIndex = 0; r.muted = false; r.solo = false;
+  renderAll(); toast(RING_DEFS[selected].label + " ring cleared");
+});
+
+/* ============ new song: donut builder (4 sections, focus = wide, others = lines) ============ */
+KIND_NAME.mic = "Mic take";
+var segCount = 4; /* sections in the focused donut loop — set by the Split button (1, 2, 4, 8, 16) */
+var songSegments = [null, null, null, null];
+var songFocus = 3; /* RING_DEFS index: the 4-beat loop */
+var songSel = 0, songMode = false, micBusy = false;
+var DONUT_RIN = 138, DONUT_ROUT = 224, DONUT_RMID = (DONUT_RIN + DONUT_ROUT) / 2;
+
+function sectorPath(rIn, rOut, a0, a1){
+  var p1 = polar(rOut, a0), p2 = polar(rOut, a1), p3 = polar(rIn, a1), p4 = polar(rIn, a0);
+  var large = (a1 - a0) > 180 ? 1 : 0;
+  return "M" + p1[0].toFixed(1) + " " + p1[1].toFixed(1) +
+    "A" + rOut + " " + rOut + " 0 " + large + " 1 " + p2[0].toFixed(1) + " " + p2[1].toFixed(1) +
+    "L" + p3[0].toFixed(1) + " " + p3[1].toFixed(1) +
+    "A" + rIn + " " + rIn + " 0 " + large + " 0 " + p4[0].toFixed(1) + " " + p4[1].toFixed(1) + "Z";
+}
+function renderDonut(){
+  var svgD = $("donutSvg");
+  while (svgD.firstChild) svgD.removeChild(svgD.firstChild);
+  /* other lengths stay thin lines — only the focused loop is expanded */
+  RING_DEFS.forEach(function(def, i){
+    if (i === songFocus) return;
+    svgD.appendChild(el("circle", { "class": "donut-thin", cx: CX, cy: CY, r: def.r }));
+    var lp = polar(def.r, 180);
+    var t = el("text", { "class": "donut-thin-label", x: lp[0], y: CY + def.r + 14 });
+    t.textContent = def.label;
+    svgD.appendChild(t);
+  });
+  /* the focused donut: segCount sections, section 1 starts at the top red bar */
+  var step = 360 / segCount, gap = Math.min(2.5, step * 0.09), inset = Math.min(7, step * 0.16);
+  for (var k = 0; k < segCount; k++){
+    (function(k){
+      var a0 = k * step + gap, a1 = (k + 1) * step - gap;
+      var seg = songSegments[k];
+      var path = el("path", { "class": "donut-seg " + (seg ? "donut-seg-full" : "donut-seg-empty") + (k === songSel ? " donut-seg-sel" : ""), d: sectorPath(DONUT_RIN, DONUT_ROUT, a0, a1) });
+      path.addEventListener("click", function(){ tapSegment(k); });
+      svgD.appendChild(path);
+      if (seg && !seg.recording && seg.peaks){
+        var bars = segCount > 8 ? 8 : (segCount > 4 ? 12 : 16), wd = "", startD = "";
+        for (var j = 0; j < bars; j++){
+          var f = bars === 1 ? 0 : j / (bars - 1);
+          var amp = seg.peaks[Math.min(seg.peaks.length - 1, Math.floor(f * seg.peaks.length))];
+          var a = (a0 + inset) + f * ((a1 - inset) - (a0 + inset));
+          var q1 = polar(DONUT_RMID - amp * 15, a), q2 = polar(DONUT_RMID + amp * 15, a);
+          var bar = "M" + q1[0].toFixed(1) + " " + q1[1].toFixed(1) + "L" + q2[0].toFixed(1) + " " + q2[1].toFixed(1);
+          wd += bar;
+          if (j === 0) startD = bar; /* red = start of the slice, aligned to the section start */
+        }
+        svgD.appendChild(el("path", { "class": "seg-wave", d: wd }));
+        svgD.appendChild(el("path", { "class": "seg-wave-start", d: startD }));
+      }
+      var mid = polar(DONUT_RMID, k * step + step / 2);
+      var lab = el("text", { "class": "donut-seg-label", x: mid[0], y: mid[1] - (seg && segCount <= 8 ? 16 : 2) });
+      lab.textContent = segCount <= 4 ? "Section " + (k + 1) : "" + (k + 1);
+      svgD.appendChild(lab);
+      var sub = el("text", { "class": "donut-seg-sub", x: mid[0], y: mid[1] + 8 });
+      sub.textContent = segCount > 8 ? "" : (seg ? (seg.recording ? "● Recording…" : seg.name) : (segCount <= 4 ? "Tap to add" : ""));
+      svgD.appendChild(sub);
+    })(k);
+  }
+  var barEl = el("line", { "class": "downbeat-bar", x1: CX, y1: CY, x2: CX, y2: 4 });
+  svgD.appendChild(barEl);
+  var hp = polar(DONUT_RMID, 0);
+  svgD.appendChild(el("circle", { "id": "donutHead", "class": "playhead", cx: hp[0], cy: hp[1], r: 7 }));
+  var def = RING_DEFS[songFocus];
+  $("donutCrBig").textContent = def.label;
+  $("donutCrSmall").textContent = "loop in focus · " + (playing ? "playing" : "paused");
+  $("focusLabel").textContent = "Focus: " + def.label + " loop · other lengths are thin lines · " +
+    songSegments.filter(Boolean).length + " of " + segCount + " sections filled";
+  updateSplitLabel();
+}
+function tapSegment(k){
+  if (micBusy) return;
+  songSel = k; renderDonut();
+  var seg = songSegments[k];
+  if (seg && !seg.recording){
+    showChooser("Section " + (k + 1) + " — “" + seg.name + "”",
+      "It starts at this section’s start edge. Replace it, or clear it and start over.",
+      [
+        { label: "Replace with a pad sample…", desc: "Pick from the available samples", action: function(){ padPicker(k); } },
+        { label: "Re-record with mic…", desc: "Counts in, then records into this section", action: function(){ micRecord(k); } },
+        { label: "Clear section", desc: "Empty this section", action: function(){ songSegments[k] = null; renderDonut(); } },
+        { label: "Keep it", desc: "Leave this section as it is", action: function(){} }
+      ]);
+    return;
+  }
+  showChooser("Section " + (k + 1) + " of the " + RING_DEFS[songFocus].label + " loop",
+    "How does this section get its sound? Every section works exactly the same way — tap any of them next.",
+    [
+      { label: "Pad", primary: true, desc: "Choose from the available samples — it drops in aligned to the start of the section",
+        action: function(){ padPicker(k); } },
+      { label: "Mic", desc: "Count-in, then record live — it keeps looping with the song",
+        action: function(){ micRecord(k); } },
+      { label: "Cancel", desc: "Leave this section empty for now", action: function(){} }
+    ]);
+}
+function padPicker(k){
+  var kinds = ["kick", "snare", "hat", "tick", "bass", "chords"];
+  var btns = kinds.map(function(kind, idx){
+    return { label: KIND_NAME[kind], primary: idx === 0,
+      desc: "Drops into section " + (k + 1) + ", start aligned to the section start",
+      action: function(){
+        songSegments[k] = { kind: kind, name: KIND_NAME[kind], peaks: genPeaks(seedCounter++ * 149 + k * 31, 72), source: "pad" };
+        renderDonut();
+        toast("Section " + (k + 1) + ": “" + KIND_NAME[kind] + "” in, aligned to the start" + (k === 0 ? " — on the red bar" : ""));
+      } };
+  });
+  btns.push({ label: "Back", desc: "Choose Pad or Mic instead", action: function(){ songSel = k; tapSegment(k); } });
+  showChooser("Pick a sample for section " + (k + 1), "Available samples. Whichever you pick starts exactly at the section’s start — no offset to fix.", btns);
+}
+function micRecord(k){
+  if (micBusy) return;
+  micBusy = true; ensureAudio();
+  var overlay = $("countIn"), num = $("countInNum");
+  overlay.hidden = false;
+  var beatMs = Math.max(320, 60000 / bpm), count = 4;
+  num.textContent = count;
+  toast("Mic: count-in for section " + (k + 1) + " — get ready");
+  var iv = setInterval(function(){
+    count--;
+    if (count > 0){ num.textContent = count; return; }
+    clearInterval(iv); overlay.hidden = true;
+    songSegments[k] = { recording: true, name: "Recording…" };
+    renderDonut();
+    var segMs = Math.max(700, (RING_DEFS[songFocus].beats / segCount) * (60000 / bpm));
+    setTimeout(function(){
+      songSegments[k] = { kind: "mic", name: "Mic take " + (k + 1), peaks: genPeaks(seedCounter++ * 167 + k * 41, 72), source: "mic" };
+      micBusy = false; renderDonut();
+      toast("Section " + (k + 1) + " recorded — it loops with the song. " + (playing ? "" : "Press play at the top to hear it."));
+    }, Math.min(segMs, 2400));
+  }, beatMs);
+}
+function startNewSong(){
+  songSegments = [];
+  for (var si = 0; si < segCount; si++) songSegments.push(null);
+  songFocus = 3; songSel = 0; songMode = true;
+  setPlaying(false); /* a new song starts paused — use the big play button in the dock */
+  $("donutWrap").hidden = false;
+  $("stage").style.display = "none";
+  $("hint").style.display = "none";
+  $("donutHint").hidden = false;
+  closeMenu();
+  renderDonut();
+  toast("New song — tap a section of the donut to add a pad sample or record with the mic");
+}
+$("newSongBtn").addEventListener("click", startNewSong);
+$("backToRings").addEventListener("click", function(){
+  songMode = false;
+  $("donutWrap").hidden = true;
+  $("stage").style.display = "";
+  $("hint").style.display = "";
+  $("donutHint").hidden = true;
+  closeMenu();
+  updateSplitLabel();
+});
+$("focusDown").addEventListener("click", function(){ if (songFocus > 0){ songFocus--; renderDonut(); } });
+$("focusUp").addEventListener("click", function(){ if (songFocus < RING_DEFS.length - 1){ songFocus++; renderDonut(); } });
+
+/* ============ slide-over menu ============ */
+var menuHideTimer = null;
+function openMenu(){
+  var p = $("menuPanel");
+  clearTimeout(menuHideTimer);
+  p.hidden = false;
+  void p.offsetWidth; /* reflow so the slide-in transition runs */
+  p.classList.add("open");
+  $("menuScrim").hidden = false;
+}
+function closeMenu(){
+  var p = $("menuPanel");
+  p.classList.remove("open");
+  $("menuScrim").hidden = true;
+  clearTimeout(menuHideTimer);
+  menuHideTimer = setTimeout(function(){ if (!p.classList.contains("open")) p.hidden = true; }, 270);
+}
+$("menuBtn").addEventListener("click", openMenu);
+$("menuClose").addEventListener("click", closeMenu);
+$("menuScrim").addEventListener("click", closeMenu);
+
+/* ============ split: how many segments the focused loop has (1, 2, 4, 8, 16) ============ */
+function splitCountNow(){
+  if (songMode) return segCount;
+  var s = rings[selected].sample;
+  return s && s.slices ? s.slices.length : 1;
+}
+function updateSplitLabel(){
+  var c = $("splitCount");
+  if (c) c.textContent = splitCountNow();
+}
+function setSegCount(n){
+  if (n === segCount){ renderDonut(); return; }
+  var next = [];
+  for (var i = 0; i < n; i++) next.push(i < songSegments.length ? songSegments[i] : null);
+  var dropped = songSegments.slice(n).filter(Boolean).length;
+  segCount = n; songSegments = next;
+  if (songSel >= n) songSel = 0;
+  renderDonut();
+  toast("Focused loop now has " + n + " segment" + (n === 1 ? "" : "s") +
+    (dropped ? " — " + dropped + " filled section" + (dropped === 1 ? "" : "s") + " beyond that were dropped" : ""));
+}
+function applySplit(n){
+  if (songMode){ setSegCount(n); return; }
+  var r = rings[selected];
+  if (!r.sample){ toast("Record a take on a ring first — then Split chops it into segments"); return; }
+  if (n === 1){
+    r.sample.slices = null; renderAll();
+    toast(RING_DEFS[selected].label + " ring: back to one whole segment");
+    return;
+  }
+  applyChop(n, "even");
+}
+function splitChooser(){
+  var cur = splitCountNow();
+  var btns = [1, 2, 4, 8, 16].map(function(n){
+    return { label: n + (n === 1 ? " segment" : " segments"), primary: n === cur,
+      desc: songMode
+        ? (n === 1 ? "The whole focused loop is one section" : "Divide the focused " + RING_DEFS[songFocus].label + " donut into " + n + " sections")
+        : (n === 1 ? "One whole take, no slices" : "Chop the selected take into " + n + " slices, each rolling on its own"),
+      action: function(){ applySplit(n); } };
+  });
+  btns.push({ label: "Cancel", desc: "Leave it at " + cur, action: function(){} });
+  showChooser("Split the " + (songMode ? RING_DEFS[songFocus].label + " loop in focus" : "selected " + RING_DEFS[selected].label + " ring"),
+    "How many segments should the currently focused loop have?", btns);
+}
+$("splitBtn").addEventListener("click", splitChooser);
+
+/* donut playback: each filled section sounds inside the focused loop */
+var donutLastBeat = 0;
+setInterval(function(){
+  if (!actx || !playing || !songMode) { donutLastBeat = beatPos(); return; }
+  var ahead = beatPos() + 0.15, spb = 60 / bpm, now = actx.currentTime;
+  if (ahead < donutLastBeat) donutLastBeat = ahead;
+  var loopBeats = RING_DEFS[songFocus].beats, segBeats = loopBeats / segCount;
+  songSegments.forEach(function(seg, k){
+    if (!seg || seg.recording || !seg.kind) return;
+    genHits(seg.kind, Math.max(segBeats, 0.25)).forEach(function(h){
+      var hb = k * segBeats + h.beat;
+      var occ = Math.floor((donutLastBeat - hb) / loopBeats) * loopBeats + hb;
+      for (; occ <= ahead; occ += loopBeats){
+        if (occ > donutLastBeat){
+          var t = now + (occ - beatPos()) * spb;
+          if (t >= now - 0.05) playHit(h.sound, Math.max(t, now), h.freq);
+        }
+      }
+    });
+  });
+  donutLastBeat = ahead;
+}, 40);
+
+/* ============ animation loop: playheads, rec arcs, beat dots, smooth zoom ============ */
+var dots = $("beatDots").children;
+function frame(){
+  var bp = beatPos();
+  RING_DEFS.forEach(function(def, i){
+    var a = norm360(bp / def.beats * 360);
+    var pos = polar(def.r, a);
+    ringEls[i].head.setAttribute("cx", pos[0]); ringEls[i].head.setAttribute("cy", pos[1]);
+    if (rings[i].status === "recording")
+      ringEls[i].rec.setAttribute("transform", "rotate(" + (bp * 140 % 360) + " " + CX + " " + CY + ")");
+  });
+  if (songMode){
+    var dh = document.getElementById("donutHead");
+    if (dh){
+      var da = norm360(bp / RING_DEFS[songFocus].beats * 360);
+      var dp = polar(DONUT_RMID, da);
+      dh.setAttribute("cx", dp[0]); dh.setAttribute("cy", dp[1]);
+    }
+    var cs = $("donutCrSmall");
+    var want = "loop in focus · " + (playing ? "playing" : "paused");
+    if (cs.textContent !== want) cs.textContent = want;
+  }
+  var bar = Math.floor(bp) % 4;
+  for (var k=0;k<4;k++) dots[k].className = k === bar ? "on" : "";
+  scale += (targetScale - scale) * 0.14;
+  zoomGroup.setAttribute("transform", "translate(" + CX + " " + CY + ") scale(" + scale.toFixed(3) + ") translate(" + (-CX) + " " + (-CY) + ")");
+  $("zoomLabel").textContent = zoomLabelText();
+  requestAnimationFrame(frame);
+}
+setBpm(96);
+renderAll();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
