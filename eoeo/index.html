@@ -107,9 +107,6 @@
       .stage-card{ border:1.5px solid var(--line); border-radius:22px; background:var(--bg); box-shadow:var(--shadow); overflow:hidden; }
       .stage{ position:relative; width:100%; aspect-ratio:1/1; touch-action:none; user-select:none; -webkit-user-select:none; }
       .stage svg{ display:block; width:100%; height:100%; }
-      .center-readout{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); text-align:center; pointer-events:none; width:34%; }
-      .center-readout .cr-big{ font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:clamp(17px,3.4vw,26px); line-height:1.1; }
-      .center-readout .cr-small{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-top:4px; }
       .hint{ font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 10px; }
       .hint:last-child{ margin-bottom:0; }
       .hint b{ color:var(--ink); }
@@ -142,12 +139,6 @@
 
       footer.note{ margin-top:22px; color:var(--muted); font-size:13px; line-height:1.6; max-width:75ch; }
       footer.note b{ color:var(--ink-soft); }
-
-      /* toast */
-      #toast{ position:fixed; left:50%; bottom:22px; transform:translate(-50%,80px); background:var(--ink); color:var(--btn-ink);
-        padding:12px 20px; border-radius:999px; font-size:14px; font-weight:600; max-width:92vw; text-align:center;
-        transition:transform .25s ease; z-index:60; pointer-events:none; }
-      #toast.show{ transform:translate(-50%,0); }
 
       /* full-screen chooser */
       #overlay{ position:fixed; inset:0; z-index:50; background:var(--bg); display:flex; flex-direction:column;
@@ -194,13 +185,12 @@
       .donut-thin-label{ font-family:"IBM Plex Mono",monospace; font-size:12px; fill:var(--muted); text-anchor:middle; pointer-events:none; }
       .donut-thin-target{ fill:none; stroke:var(--rec); stroke-width:5; stroke-dasharray:10 8; pointer-events:none; }
       .donut-level-label{ font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:600; fill:var(--rec); text-anchor:middle; pointer-events:none; paint-order:stroke; stroke:var(--bg); stroke-width:4px; stroke-linejoin:round; }
-      .donut-seg-label{ font-family:"IBM Plex Mono",monospace; font-size:15px; font-weight:600; fill:var(--ink); text-anchor:middle; pointer-events:none; }
       .donut-seg-sub{ font-family:"Archivo",sans-serif; font-size:12px; font-weight:700; fill:var(--ink-soft); text-anchor:middle; pointer-events:none; }
       .seg-wave{ fill:none; stroke:var(--line); stroke-width:2.4; stroke-linecap:round; pointer-events:none; }
       .seg-wave-start{ fill:none; stroke:var(--rec); stroke-width:5; stroke-linecap:round; pointer-events:none; }
       .countin{ position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; }
+      .countin[hidden]{ display:none; }
       .countin span{ font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:clamp(64px,16vw,120px); color:var(--rec); background:var(--bg); border:2px solid var(--rec); border-radius:50%; width:1.9em; height:1.9em; display:grid; place-items:center; }
-      @media (prefers-reduced-motion: reduce){ #toast{ transition:none; } }
     </style>
   </head>
   <body>
@@ -223,10 +213,6 @@
           <div id="donutWrap">
             <div class="donut-stage" id="donutStage">
               <svg id="donutSvg" viewBox="0 0 640 640" role="img" aria-label="New song donut, divided into sections. Tap a section to add a pad sample or record from the microphone."></svg>
-              <div class="center-readout">
-                <div class="cr-big" id="donutCrBig">4 beats</div>
-                <div class="cr-small" id="donutCrSmall">loop in focus · paused</div>
-              </div>
               <div class="countin" id="countIn" hidden><span id="countInNum">4</span></div>
             </div>
           </div>
@@ -234,10 +220,6 @@
             <svg id="stageSvg" viewBox="0 0 640 640" role="img" aria-label="Concentric loop rings. Tap an empty ring to record, drag a waveform to roll it or move it to another ring.">
               <g id="zoomGroup"><line class="downbeat-bar" x1="320" y1="320" x2="320" y2="4" /></g>
             </svg>
-            <div class="center-readout">
-              <div class="cr-big" id="crBig">1 beat</div>
-              <div class="cr-small" id="crSmall">innermost ring</div>
-            </div>
           </div>
         </div>
       </main>
@@ -360,8 +342,6 @@
       <p class="ov-sub" id="ovSub"></p>
       <div class="ov-buttons" id="ovButtons"></div>
     </div>
-
-    <div id="toast" role="status"></div>
 
 <script>
 "use strict";
@@ -614,11 +594,9 @@ function renderRingStates(){
 }
 
 /* ============ toast + full-screen chooser ============ */
-var toastTimer = null;
-function toast(msg){
-  var t = $("toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 3200);
-}
+/* toast is intentionally a no-op: feedback is the visual change itself
+   (a section filling in, the view switching, the waveform appearing). */
+function toast(msg){}
 function showChooser(title, sub, buttons){
   $("ovTitle").textContent = title;
   $("ovSub").textContent = sub || "";
@@ -651,8 +629,6 @@ function sampleMeta(i){
 }
 function renderSelPanel(){
   var r = rings[selected], def = RING_DEFS[selected];
-  $("crBig").textContent = def.label;
-  $("crSmall").textContent = r.status === "full" ? r.sample.name : (r.status === "recording" ? "recording" : "empty ring");
   var empty = r.status !== "full";
   $("selEmpty").hidden = !empty;
   $("selEmpty").textContent = r.status === "recording" ? "Recording a take on the " + def.label + " ring…"
@@ -1080,12 +1056,11 @@ function renderDonut(){
         svgD.appendChild(el("path", { "class": "seg-wave-start", d: "M" + r1[0].toFixed(1) + " " + r1[1].toFixed(1) + "L" + r2[0].toFixed(1) + " " + r2[1].toFixed(1) }));
       }
       var mid = polar(DONUT_RMID, k * step + step / 2);
-      var lab = el("text", { "class": "donut-seg-label", x: mid[0], y: mid[1] - (seg && segCount <= 8 ? 16 : 2) });
-      lab.textContent = segCount <= 4 ? "Section " + (k + 1) : "" + (k + 1);
-      svgD.appendChild(lab);
-      var sub = el("text", { "class": "donut-seg-sub", x: mid[0], y: mid[1] + 8 });
-      sub.textContent = segCount > 8 ? "" : (seg ? (seg.recording ? "● Recording…" : seg.name) : (segCount <= 4 ? "Tap to add" : ""));
-      svgD.appendChild(sub);
+      if (seg && segCount <= 8){
+        var sub = el("text", { "class": "donut-seg-sub", x: mid[0], y: mid[1] + 4 });
+        sub.textContent = seg.recording ? "● Recording…" : seg.name;
+        svgD.appendChild(sub);
+      }
     })(k);
   }
   var barEl = el("line", { "class": "downbeat-bar", x1: CX, y1: CY, x2: CX, y2: 4 });
@@ -1104,8 +1079,6 @@ function renderDonut(){
   var hp = polar(DONUT_RMID, 0);
   svgD.appendChild(el("circle", { "id": "donutHead", "class": "playhead", cx: hp[0], cy: hp[1], r: 7 }));
   var def = RING_DEFS[songFocus];
-  $("donutCrBig").textContent = def.label;
-  $("donutCrSmall").textContent = "loop in focus · " + (playing ? "playing" : "paused");
   $("focusLabel").textContent = "Focus: " + def.label + " loop · other lengths are thin lines · " +
     songSegments.filter(Boolean).length + " of " + segCount + " sections filled";
   updateSplitLabel();
@@ -1595,9 +1568,6 @@ function frame(){
       var dp = polar(DONUT_RMID, da);
       dh.setAttribute("cx", dp[0]); dh.setAttribute("cy", dp[1]);
     }
-    var cs = $("donutCrSmall");
-    var want = "loop in focus · " + (playing ? "playing" : "paused");
-    if (cs.textContent !== want) cs.textContent = want;
   }
   var bar = Math.floor(bp) % 4;
   for (var k=0;k<4;k++) dots[k].className = k === bar ? "on" : "";
