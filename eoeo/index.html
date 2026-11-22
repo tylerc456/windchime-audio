@@ -718,7 +718,7 @@ function record(i){
 /* ============ transfers between rings ============ */
 function cloneSample(s){
   return { kind: s.kind, name: s.name, peaks: s.peaks.slice(), startDeg: s.startDeg,
-    spanDeg: s.spanDeg, offsetDeg: s.offsetDeg,
+    spanDeg: s.spanDeg, offsetDeg: s.offsetDeg, buffer: s.buffer || null,
     slices: s.slices ? s.slices.map(function(sl){ return { roll: sl.roll, frac: sl.frac }; }) : null,
     selSlice: s.selSlice };
 }
@@ -1281,6 +1281,138 @@ function padPicker(k){
   btns.push({ label: "Back", desc: "Choose Pad or Mic instead", action: function(){ songSel = k; tapSegment(k); } });
   showChooser("Pick a sample for section " + (k + 1), "Available samples. Whichever you pick starts exactly at the section’s start — no offset to fix.", btns);
 }
+function peaksFromAudioBuffer(buffer, count){
+  count = count || 72;
+  var nCh = Math.max(1, buffer.numberOfChannels || 1);
+  var len = buffer.length || 0;
+  var peaks = [];
+  if (!len) { for (var z = 0; z < count; z++) peaks.push(0.08); return peaks; }
+  var channels = [];
+  for (var c = 0; c < nCh; c++) { try { channels.push(buffer.getChannelData(c)); } catch (e) {} }
+  if (!channels.length) { for (var z2 = 0; z2 < count; z2++) peaks.push(0.08); return peaks; }
+  var block = Math.max(1, Math.floor(len / count));
+  var overall = 0;
+  for (var i = 0; i < count; i++){
+    var start = i * block;
+    var end = (i === count - 1) ? len : Math.min(len, start + block);
+    var mx = 0;
+    for (var ch = 0; ch < channels.length; ch++){
+      var data = channels[ch];
+      for (var j = start; j < end; j++){ var v = Math.abs(data[j]); if (v > mx) mx = v; }
+    }
+    peaks.push(mx);
+    if (mx > overall) overall = mx;
+  }
+  if (overall > 0.001){
+    for (var p = 0; p < peaks.length; p++) peaks[p] = Math.max(0.08, Math.min(1, peaks[p] / overall));
+  } else {
+    for (var q = 0; q < peaks.length; q++) peaks[q] = 0.08;
+  }
+  return peaks;
+}
+function decodeRecordedAudio(arrayBuffer){
+  return new Promise(function(resolve, reject){
+    if (!actx){ reject(new Error("no-audio-context")); return; }
+    var settled = false;
+    function ok(buf){ if (!settled){ settled = true; resolve(buf); } }
+    function err(e){ if (!settled){ settled = true; reject(e || new Error("decode-failed")); } }
+    try {
+      var ret = actx.decodeAudioData(arrayBuffer, ok, err);
+      if (ret && typeof ret.then === "function") ret.then(ok, err);
+    } catch (e) { err(e); }
+  });
+}
+function playRecordedBuffer(buffer, when){
+  if (!actx || !master || !buffer) return;
+  try {
+    var src = actx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(master);
+    src.start(Math.max(when, actx.currentTime));
+  } catch (e) {}
+}
+function showMicError(k, message){
+  micBusy = false;
+  songSegments[k] = null;
+  try { saveFocusLevel(); } catch (e) {}
+  renderDonut();
+  showChooser("Microphone unavailable", message, [
+    { label: "OK", primary: true, desc: "Leave section " + (k + 1) + " empty — no fake take was made", action: function(){} }
+  ]);
+}
+function startMicRecording(k){
+  var segMs = (RING_DEFS[songFocus].beats / segCount) * (60000 / bpm);
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function" || typeof MediaRecorder === "undefined"){
+    showMicError(k, "This browser can't reach the microphone here — it needs a secure (HTTPS) page, microphone support, and a mic. Nothing was recorded, and the section was left empty.");
+    return;
+  }
+  if (!actx) ensureAudio();
+  if (!actx){
+    showMicError(k, "Audio isn't available in this browser, so the take couldn't be recorded. Nothing was recorded, and the section was left empty.");
+    return;
+  }
+  songSegments[k] = { recording: true, name: "Recording…" };
+  renderDonut();
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream){
+    var chunks = [];
+    var recorder = null;
+    function stopTracks(){ stream.getTracks().forEach(function(t){ try { t.stop(); } catch (e) {} }); }
+    try { recorder = new MediaRecorder(stream); } catch (e) {
+      stopTracks();
+      showMicError(k, "Recording isn't supported in this browser, so no take was made. The section was left empty.");
+      return;
+    }
+    recorder.ondataavailable = function(ev){ if (ev.data && ev.data.size > 0) chunks.push(ev.data); };
+    recorder.onerror = function(){
+      stopTracks();
+      showMicError(k, "The recording stopped with an error, so no take was saved. The section was left empty.");
+    };
+    recorder.onstop = function(){
+      stopTracks();
+      if (!chunks.length){
+        showMicError(k, "No audio was captured from the microphone, so no take was saved. The section was left empty.");
+        return;
+      }
+      var mime = recorder.mimeType || "audio/webm";
+      var blob = new Blob(chunks, { type: mime });
+      var abP;
+      if (typeof blob.arrayBuffer === "function") abP = blob.arrayBuffer();
+      else abP = new Promise(function(res, rej){
+        var fr = new FileReader();
+        fr.onload = function(){ res(fr.result); };
+        fr.onerror = function(){ rej(fr.error || new Error("read-failed")); };
+        fr.readAsArrayBuffer(blob);
+      });
+      abP.then(function(ab){
+        return decodeRecordedAudio(ab && ab.slice ? ab.slice(0) : ab);
+      }).then(function(audioBuffer){
+        var peaks = peaksFromAudioBuffer(audioBuffer, 72);
+        songSegments[k] = { kind: "mic", name: "Mic take " + (k + 1), peaks: peaks, source: "mic", rollDeg: 0, buffer: audioBuffer };
+        try { saveFocusLevel(); } catch (e) {}
+        micBusy = false;
+        renderDonut();
+        toast("Section " + (k + 1) + " recorded — it loops with the song. " + (playing ? "" : "Press play to hear it."));
+      }).catch(function(err){
+        showMicError(k, "The recording couldn't be decoded, so no take was saved. The section was left empty.");
+      });
+    };
+    try { recorder.start(); } catch (e) {
+      stopTracks();
+      showMicError(k, "The recorder couldn't start, so no take was made. The section was left empty.");
+      return;
+    }
+    setTimeout(function(){ try { if (recorder.state !== "inactive") recorder.stop(); } catch (e) {} }, segMs);
+  }).catch(function(err){
+    var msg;
+    if (err && (err.name === "NotAllowedError" || err.name === "SecurityError"))
+      msg = "Microphone permission was denied, so nothing was recorded. Allow mic access in the browser and try again — the section was left empty.";
+    else if (err && (err.name === "NotFoundError" || err.name === "OverconstrainedError" || err.name === "NotReadableError"))
+      msg = "No usable microphone was found, so nothing was recorded. The section was left empty.";
+    else
+      msg = "The microphone couldn't be opened, so nothing was recorded. The section was left empty.";
+    showMicError(k, msg);
+  });
+}
 function micRecord(k){
   if (micBusy) return;
   micBusy = true; ensureAudio();
@@ -1293,14 +1425,7 @@ function micRecord(k){
     count--;
     if (count > 0){ num.textContent = count; return; }
     clearInterval(iv); overlay.hidden = true;
-    songSegments[k] = { recording: true, name: "Recording…" };
-    renderDonut();
-    var segMs = Math.max(700, (RING_DEFS[songFocus].beats / segCount) * (60000 / bpm));
-    setTimeout(function(){
-      songSegments[k] = { kind: "mic", name: "Mic take " + (k + 1), peaks: genPeaks(seedCounter++ * 167 + k * 41, 72), source: "mic", rollDeg: 0 };
-      micBusy = false; renderDonut();
-      toast("Section " + (k + 1) + " recorded — it loops with the song. " + (playing ? "" : "Press play at the top to hear it."));
-    }, Math.min(segMs, 2400));
+    startMicRecording(k);
   }, beatMs);
 }
 /* ============ donut press-hold: select, roll-drag to align, drag across sections ============
@@ -1312,7 +1437,7 @@ function micRecord(k){
 function cloneSeg(seg){
   if (!seg) return null;
   return { kind: seg.kind, name: seg.name, peaks: seg.peaks ? seg.peaks.slice() : seg.peaks,
-    source: seg.source, rollDeg: seg.rollDeg || 0 };
+    source: seg.source, rollDeg: seg.rollDeg || 0, buffer: seg.buffer || null };
 }
 function snapDonutRoll(roll, step){
   var r = ((roll % step) + step) % step;
@@ -1423,6 +1548,9 @@ function doLevelTransfer(fromSegIdx, toLevelIdx, mode, plan){
       ns.peaks = donutPeaksSlice(source, j, plan.nSplit);
       ns.name = source.name + " · part " + (j + 1) + "/" + plan.nSplit;
       ns.rollDeg = j === 0 ? plan.tgtRoll : 0;
+      /* split across sections: only the landing part keeps the real buffer;
+         extra parts fall back to their sliced peaks / synth hits */
+      if (j !== 0) ns.buffer = null;
     } else {
       ns.rollDeg = plan.tgtRoll;
     }
@@ -1775,6 +1903,19 @@ setInterval(function(){
     lvlSegs.forEach(function(seg, k){
       if (!seg || seg.recording || !seg.kind) return;
       var rollBeats = ((seg.rollDeg || 0) / 360) * loopBeats; /* rolled start shifts the hits inside their section */
+      if (seg.buffer){
+        /* real recorded audio: play the buffer once per loop occurrence,
+           starting at the sample's start beat (section start + roll offset) */
+        var hbBuf = k * segBeats + rollBeats;
+        var occBuf = Math.floor((donutLastBeat - hbBuf) / loopBeats) * loopBeats + hbBuf;
+        for (; occBuf <= ahead; occBuf += loopBeats){
+          if (occBuf > donutLastBeat){
+            var tBuf = now + (occBuf - beatPos()) * spb;
+            if (tBuf >= now - 0.05) playRecordedBuffer(seg.buffer, Math.max(tBuf, now));
+          }
+        }
+        return;
+      }
       genHits(seg.kind, Math.max(segBeats, 0.25)).forEach(function(h){
         var hb = k * segBeats + ((rollBeats + h.beat) % segBeats);
         var occ = Math.floor((donutLastBeat - hb) / loopBeats) * loopBeats + hb;
