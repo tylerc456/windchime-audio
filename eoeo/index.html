@@ -192,6 +192,8 @@
       .donut-seg.drop-target{ stroke:var(--line); stroke-width:6; stroke-dasharray:10 8; }
       .donut-thin{ fill:none; stroke:var(--empty-ring); stroke-width:2; pointer-events:none; }
       .donut-thin-label{ font-family:"IBM Plex Mono",monospace; font-size:12px; fill:var(--muted); text-anchor:middle; pointer-events:none; }
+      .donut-thin-target{ fill:none; stroke:var(--rec); stroke-width:5; stroke-dasharray:10 8; pointer-events:none; }
+      .donut-level-label{ font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:600; fill:var(--rec); text-anchor:middle; pointer-events:none; paint-order:stroke; stroke:var(--bg); stroke-width:4px; stroke-linejoin:round; }
       .donut-seg-label{ font-family:"IBM Plex Mono",monospace; font-size:15px; font-weight:600; fill:var(--ink); text-anchor:middle; pointer-events:none; }
       .donut-seg-sub{ font-family:"Archivo",sans-serif; font-size:12px; font-weight:700; fill:var(--ink-soft); text-anchor:middle; pointer-events:none; }
       .seg-wave{ fill:none; stroke:var(--line); stroke-width:2.4; stroke-linecap:round; pointer-events:none; }
@@ -347,7 +349,7 @@
       <section class="panel">
         <h2>How it works</h2>
         <p class="hint" id="hint" style="display:none"><b>Tap</b> an empty ring to record a take into it — pick a demo sound in this menu first if you want a kick, snare or tap on that ring. <b>Drag</b> a waveform to roll it around its ring and line its start up with the top — it <b>snaps to the red bar</b> when you get close, so quantizing is just “roll until it clicks.” <b>Drag it onto another ring</b> and let go — you’ll get the big Tile / Move / Copy choice. The <b>red bar</b> at the top is where every ring’s section starts and ends, and each waveform’s <b>beginning</b> — the start of the slice, not its loudest point — is drawn as a <b>red segment</b>, so you align beginnings, not peaks. The dot on each ring is its playhead: the centre ring laps in 1 beat, the next in 2, then 4, 8… The round <b>Split</b> button under the stage chops the selected ring’s take into 1, 2, 4, 8 or 16 independently rolling slices.</p>
-        <p class="hint" id="donutHint">This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. <b>Press and hold</b> a filled section to select it, then <b>drag inside the section</b> to roll the waveform — the red start segment moves with your drag and <b>snaps to the section’s start edge</b> when you get close. <b>Drag onto another section</b> instead and letting go offers <b>Move / Copy</b> for that sample. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
+        <p class="hint" id="donutHint">This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. <b>Press and hold</b> a filled section to select it, then <b>drag inside the section</b> to roll the waveform — the red start segment moves with your drag and <b>snaps to the section’s start edge</b> when you get close. <b>Drag onto another section</b> instead and letting go offers <b>Move / Copy</b> for that sample. To shift a sample to a <b>different level</b>, tap its section and choose <b>Move / copy to the shorter or longer loop</b> — or, while holding it, <b>pull inwards</b> for the loop half as long or <b>push outwards</b> for the loop twice as long and let go. Moving <b>up</b> keeps the sample’s real length and lands it at the same beat in the longer loop; moving <b>down</b> splits or fits it to the shorter cycle. Either way the view switches to the level it landed in, and that level keeps it when you focus away and back with the <b>shorter / longer</b> controls. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
       </section>
 
       <p class="menu-note"><b>About this mockup:</b> it runs entirely in your browser. There’s no microphone yet — tapping a ring simulates a Koala-style take and synthesises a sound for that ring (hi-hat on the 1-beat, kick on the 2, groove on the 4, bass on the 8, chords beyond) — or use the demo-sound picker to put a kick, snare, tap, bass or chords on any ring you like — so you can feel the interaction model: ring = loop length, drag = roll, drag across rings = Tile / Move / Copy, chop = slice and roll each piece on its own. A production version would swap the simulated takes for real mic input and an audio engine underneath the same interface.</p>
@@ -998,6 +1000,21 @@ KIND_NAME.mic = "Mic take";
 var segCount = 4; /* sections in the focused donut loop — set by the Split button (1, 2, 4, 8, 16) */
 var songSegments = [null, null, null, null];
 var songFocus = 3; /* RING_DEFS index: the 4-beat loop */
+/* Per-level storage: every loop length keeps its own split + sections, so a sample
+   shifted to another level is still there when that level is focused again.
+   songSegments / segCount above are always the focused level's live view of this. */
+var songLevels = RING_DEFS.map(function(){ return { segCount: 4, segments: [null, null, null, null] }; });
+songLevels[songFocus].segments = songSegments;
+function saveFocusLevel(){
+  if (songLevels[songFocus]){ songLevels[songFocus].segCount = segCount; songLevels[songFocus].segments = songSegments; }
+}
+function loadFocusLevel(idx){
+  saveFocusLevel();
+  songFocus = idx;
+  segCount = songLevels[idx].segCount;
+  songSegments = songLevels[idx].segments;
+  if (songSel >= segCount) songSel = 0;
+}
 var songSel = 0, songMode = false, micBusy = false;
 var DONUT_RIN = 138, DONUT_ROUT = 224, DONUT_RMID = (DONUT_RIN + DONUT_ROUT) / 2;
 /* donut press-hold drag state: quick tap = chooser (unchanged); hold = select + roll / transfer */
@@ -1017,10 +1034,16 @@ function renderDonut(){
   /* other lengths stay thin lines — only the focused loop is expanded */
   RING_DEFS.forEach(function(def, i){
     if (i === songFocus) return;
-    svgD.appendChild(el("circle", { "class": "donut-thin", cx: CX, cy: CY, r: def.r }));
+    var lvlSegs = (i === songFocus) ? songSegments : (songLevels[i] ? songLevels[i].segments : []);
+    var filled = lvlSegs ? lvlSegs.filter(Boolean).length : 0;
+    var isLevelTarget = !!(donutDrag && donutDrag.held && donutDrag.targetLevel &&
+      ((donutDrag.targetLevel < 0 && i === songFocus - 1) || (donutDrag.targetLevel > 0 && i === songFocus + 1)));
+    svgD.appendChild(el("circle", { "class": isLevelTarget ? "donut-thin-target" : "donut-thin", cx: CX, cy: CY, r: def.r }));
     var lp = polar(def.r, 180);
-    var t = el("text", { "class": "donut-thin-label", x: lp[0], y: CY + def.r + 14 });
-    t.textContent = def.label;
+    var t = el("text", { "class": isLevelTarget ? "donut-level-label" : "donut-thin-label", x: lp[0], y: CY + def.r + 14 });
+    t.textContent = isLevelTarget
+      ? (donutDrag.targetLevel < 0 ? "Release — shorter loop (" + def.label + ")" : "Release — longer loop (" + def.label + ")")
+      : def.label + (filled ? " · " + filled + " filled" : "");
     svgD.appendChild(t);
   });
   /* the focused donut: segCount sections, section 1 starts at the top red bar */
@@ -1067,6 +1090,17 @@ function renderDonut(){
   }
   var barEl = el("line", { "class": "downbeat-bar", x1: CX, y1: CY, x2: CX, y2: 4 });
   svgD.appendChild(barEl);
+  /* re-draw the aimed-at adjacent level on top of the donut, so the pull-in / push-out
+     target stays visible even where its thin line runs underneath the wide donut */
+  if (donutDrag && donutDrag.held && donutDrag.targetLevel){
+    var tIdx = songFocus + donutDrag.targetLevel;
+    if (tIdx >= 0 && tIdx < RING_DEFS.length){
+      svgD.appendChild(el("circle", { "class": "donut-thin-target", cx: CX, cy: CY, r: RING_DEFS[tIdx].r }));
+      var tl = el("text", { "class": "donut-level-label", x: CX, y: CY - RING_DEFS[tIdx].r - 10 });
+      tl.textContent = donutDrag.targetLevel < 0 ? "Shorter loop · " + RING_DEFS[tIdx].label : "Longer loop · " + RING_DEFS[tIdx].label;
+      svgD.appendChild(tl);
+    }
+  }
   var hp = polar(DONUT_RMID, 0);
   svgD.appendChild(el("circle", { "id": "donutHead", "class": "playhead", cx: hp[0], cy: hp[1], r: 7 }));
   var def = RING_DEFS[songFocus];
@@ -1081,14 +1115,28 @@ function tapSegment(k){
   songSel = k; renderDonut();
   var seg = songSegments[k];
   if (seg && !seg.recording){
+    var filledBtns = [];
+    if (songFocus > 0){
+      (function(){
+        var downIdx = songFocus - 1;
+        filledBtns.push({ label: "Move / copy to shorter loop…", desc: "Down a level to the " + RING_DEFS[downIdx].label + " loop — half the cycle length. It is split or fitted to the shorter cycle and lands in the corresponding position",
+          action: function(){ offerLevelTransfer(k, downIdx); } });
+      })();
+    }
+    if (songFocus < RING_DEFS.length - 1){
+      (function(){
+        var upIdx = songFocus + 1;
+        filledBtns.push({ label: "Move / copy to longer loop…", desc: "Up a level to the " + RING_DEFS[upIdx].label + " loop — double the cycle length. Its real length is preserved and it lands in the corresponding position",
+          action: function(){ offerLevelTransfer(k, upIdx); } });
+      })();
+    }
+    filledBtns.push({ label: "Replace with a pad sample…", desc: "Pick from the available samples", action: function(){ padPicker(k); } });
+    filledBtns.push({ label: "Re-record with mic…", desc: "Counts in, then records into this section", action: function(){ micRecord(k); } });
+    filledBtns.push({ label: "Clear section", desc: "Empty this section", action: function(){ songSegments[k] = null; saveFocusLevel(); renderDonut(); } });
+    filledBtns.push({ label: "Keep it", desc: "Leave this section as it is", action: function(){} });
     showChooser("Section " + (k + 1) + " — “" + seg.name + "”",
-      "It starts at this section’s start edge. Replace it, or clear it and start over.",
-      [
-        { label: "Replace with a pad sample…", desc: "Pick from the available samples", action: function(){ padPicker(k); } },
-        { label: "Re-record with mic…", desc: "Counts in, then records into this section", action: function(){ micRecord(k); } },
-        { label: "Clear section", desc: "Empty this section", action: function(){ songSegments[k] = null; renderDonut(); } },
-        { label: "Keep it", desc: "Leave this section as it is", action: function(){} }
-      ]);
+      "It starts at this section’s start edge. Replace it, clear it, or shift it to the loop half or twice as long.",
+      filledBtns);
     return;
   }
   showChooser("Section " + (k + 1) + " of the " + RING_DEFS[songFocus].label + " loop",
@@ -1176,6 +1224,97 @@ function offerSegTransfer(from, to, snapshot){
         action: function(){ songSegments[from] = snapshot; renderDonut(); } }
     ]);
 }
+/* ============ donut: shift a sample to the adjacent level (half / double cycle) ============
+   Corresponding position = the same beat in the target loop. Up (double length): the
+   sample's real length is preserved — its peaks are carried over whole and it lands at
+   that beat, in whichever target section contains it, rolled by the leftover offset
+   inside that section. Down (half length): that beat wraps into the shorter cycle, and
+   if the sample is longer than one target section it is split across consecutive
+   target sections (its peaks divided between them) so it fits the shorter cycle. */
+function donutPeaksSlice(seg, k, n){
+  if (!seg.peaks) return seg.peaks;
+  var len = seg.peaks.length, a = Math.floor(k * len / n), b = Math.max(a + 1, Math.floor((k + 1) * len / n));
+  return seg.peaks.slice(a, b);
+}
+function levelPlan(fromSegIdx, toLevelIdx){
+  saveFocusLevel();
+  var fromLevelIdx = songFocus;
+  var srcSegCount = segCount, tgtSegCount = songLevels[toLevelIdx].segCount;
+  var srcBeats = RING_DEFS[fromLevelIdx].beats, tgtBeats = RING_DEFS[toLevelIdx].beats;
+  var srcSegBeats = srcBeats / srcSegCount, tgtSegBeats = tgtBeats / tgtSegCount;
+  var seg = songSegments[fromSegIdx];
+  var srcStartBeat = fromSegIdx * srcSegBeats + ((seg && seg.rollDeg) || 0) / 360 * srcBeats;
+  var isUp = tgtBeats > srcBeats;
+  var tgtStartBeat = isUp ? srcStartBeat : ((srcStartBeat % tgtBeats) + tgtBeats) % tgtBeats;
+  var slot = Math.floor(tgtStartBeat / tgtSegBeats);
+  var tgtIdx = ((slot % tgtSegCount) + tgtSegCount) % tgtSegCount;
+  var offsetBeat = tgtStartBeat - slot * tgtSegBeats;
+  var tgtRoll = (offsetBeat / tgtSegBeats) * (360 / tgtSegCount);
+  var ratio = srcSegBeats / tgtSegBeats;
+  var nSplit = ratio > 1.001 ? Math.ceil(ratio - 1e-9) : 1;
+  /* never split across more sections than the target loop has */
+  if (nSplit > tgtSegCount) nSplit = tgtSegCount;
+  var occupiedNames = [];
+  var tgtSegs = songLevels[toLevelIdx].segments;
+  for (var j = 0; j < nSplit; j++){
+    var oi = (tgtIdx + j) % tgtSegCount;
+    if (tgtSegs[oi]) occupiedNames.push("section " + (oi + 1) + " (“" + tgtSegs[oi].name + "”)");
+  }
+  return { fromLevelIdx: fromLevelIdx, toLevelIdx: toLevelIdx, isUp: isUp,
+    srcSegBeats: srcSegBeats, tgtSegBeats: tgtSegBeats, tgtIdx: tgtIdx, tgtRoll: tgtRoll,
+    nSplit: nSplit, occupiedNames: occupiedNames };
+}
+function doLevelTransfer(fromSegIdx, toLevelIdx, mode, plan){
+  var seg = songSegments[fromSegIdx]; if (!seg) return;
+  plan = plan || levelPlan(fromSegIdx, toLevelIdx);
+  var source = cloneSeg(seg);
+  var tgtSegs = songLevels[toLevelIdx].segments;
+  for (var j = 0; j < plan.nSplit; j++){
+    var ns = cloneSeg(source);
+    if (plan.nSplit > 1){
+      ns.peaks = donutPeaksSlice(source, j, plan.nSplit);
+      ns.name = source.name + " · part " + (j + 1) + "/" + plan.nSplit;
+      ns.rollDeg = j === 0 ? plan.tgtRoll : 0;
+    } else {
+      ns.rollDeg = plan.tgtRoll;
+    }
+    tgtSegs[(plan.tgtIdx + j) % songLevels[toLevelIdx].segCount] = ns;
+  }
+  if (mode !== "copy"){
+    songSegments[fromSegIdx] = null;
+    saveFocusLevel();
+  }
+  var landed = plan.tgtIdx;
+  loadFocusLevel(toLevelIdx);
+  songSel = landed;
+  renderDonut();
+  toast((mode === "copy" ? "Copied" : "Moved") + " to the " + RING_DEFS[toLevelIdx].label + " loop — section " + (landed + 1) +
+    (plan.nSplit > 1 ? ", split across " + plan.nSplit + " sections to fit the shorter cycle"
+      : plan.isUp ? ", at the same beat, real length kept" : ", fitted to the shorter cycle"));
+}
+function offerLevelTransfer(fromSegIdx, toLevelIdx, snapshot){
+  var seg = songSegments[fromSegIdx]; if (!seg) return;
+  if (toLevelIdx < 0 || toLevelIdx >= RING_DEFS.length) return;
+  var plan = levelPlan(fromSegIdx, toLevelIdx);
+  var dirWord = plan.isUp ? "longer" : "shorter";
+  var landDesc = plan.nSplit > 1
+    ? "Split across " + plan.nSplit + " sections of the " + RING_DEFS[toLevelIdx].label + " loop, starting in section " + (plan.tgtIdx + 1) + ", so it fits the shorter cycle"
+    : "Land in section " + (plan.tgtIdx + 1) + " of the " + RING_DEFS[toLevelIdx].label + " loop — the corresponding position (same beat)" +
+      (plan.isUp ? ", with its real length preserved" : ", fitted to the shorter cycle");
+  showChooser((plan.isUp ? "Shift up to the " : "Shift down to the ") + RING_DEFS[toLevelIdx].label + " loop?",
+    "“" + seg.name + "” is in section " + (fromSegIdx + 1) + " of the " + RING_DEFS[songFocus].label + " loop. The " +
+    RING_DEFS[toLevelIdx].label + " loop is " + (plan.isUp ? "twice as long" : "half as long") + "." +
+    (plan.occupiedNames.length ? " This replaces " + plan.occupiedNames.join(" and ") + " there." : "") +
+    " After the shift, the view switches to that " + dirWord + " loop so you can see where it landed.",
+    [
+      { label: "Move", primary: true, desc: landDesc + ". Section " + (fromSegIdx + 1) + " here is left empty",
+        action: function(){ doLevelTransfer(fromSegIdx, toLevelIdx, "move", plan); } },
+      { label: "Copy", desc: landDesc + ". Section " + (fromSegIdx + 1) + " here keeps its sample too",
+        action: function(){ doLevelTransfer(fromSegIdx, toLevelIdx, "copy", plan); } },
+      { label: "Cancel", desc: "Leave it in section " + (fromSegIdx + 1) + " of this loop",
+        action: function(){ if (snapshot) songSegments[fromSegIdx] = snapshot; renderDonut(); } }
+    ]);
+}
 function donutPoint(e){
   var rect = $("donutSvg").getBoundingClientRect();
   return [ (e.clientX - rect.left) / rect.width * 640, (e.clientY - rect.top) / rect.height * 640 ];
@@ -1198,7 +1337,7 @@ donutStageEl.addEventListener("pointerdown", function(e){
   if (k < 0) return;
   var seg = songSegments[k];
   if (!seg || seg.recording || !seg.peaks) return; /* empty / recording: plain tap via click, as before */
-  donutDrag = { from: k, target: k, lastAngle: donutAngle(e), moved: 0, held: false, cancelled: false,
+  donutDrag = { from: k, target: k, targetLevel: 0, lastAngle: donutAngle(e), moved: 0, held: false, cancelled: false,
     startX: e.clientX, startY: e.clientY, pointerId: e.pointerId, snapshot: cloneSeg(seg) };
   clearTimeout(donutHoldTimer);
   donutHoldTimer = setTimeout(function(){
@@ -1207,7 +1346,7 @@ donutStageEl.addEventListener("pointerdown", function(e){
     songSel = donutDrag.from;
     try { donutStageEl.setPointerCapture(donutDrag.pointerId); } catch (err) {}
     renderDonut();
-    toast("Section " + (donutDrag.from + 1) + " selected — drag inside it to roll the red start into place, or drag onto another section for Move / Copy");
+    toast("Section " + (donutDrag.from + 1) + " selected — drag inside it to roll the red start into place, drag onto another section for Move / Copy, or pull in / push out to shift it to the shorter / longer loop");
   }, 350);
 });
 donutStageEl.addEventListener("pointermove", function(e){
@@ -1219,7 +1358,17 @@ donutStageEl.addEventListener("pointermove", function(e){
     return;
   }
   var p = donutPoint(e);
-  if (Math.hypot(p[0] - CX, p[1] - CY) < 70) return; /* angle is meaningless near the centre */
+  var rad = Math.hypot(p[0] - CX, p[1] - CY);
+  /* Pull well inside the donut = aim at the shorter level (half the cycle);
+     push well outside it = aim at the longer level (double the cycle). */
+  if (rad < DONUT_RIN - 36 && songFocus > 0){
+    donutDrag.targetLevel = -1; donutDrag.target = donutDrag.from; renderDonut(); return;
+  }
+  if (rad > DONUT_ROUT + 30 && songFocus < RING_DEFS.length - 1){
+    donutDrag.targetLevel = 1; donutDrag.target = donutDrag.from; renderDonut(); return;
+  }
+  donutDrag.targetLevel = 0;
+  if (rad < 70) return; /* angle is meaningless near the centre */
   var a = donutAngle(e);
   var delta = ((a - donutDrag.lastAngle + 540) % 360) - 180;
   donutDrag.lastAngle = a;
@@ -1242,7 +1391,10 @@ function endDonutPointer(e){
   if (!d.held) return; /* quick tap — the click that follows opens the usual chooser */
   suppressDonutClick = true;
   setTimeout(function(){ suppressDonutClick = false; }, 600);
-  if (d.target !== d.from){
+  if (d.targetLevel){
+    offerLevelTransfer(d.from, songFocus + d.targetLevel, d.snapshot);
+    renderDonut();
+  } else if (d.target !== d.from){
     offerSegTransfer(d.from, d.target, d.snapshot);
     renderDonut();
   } else {
@@ -1265,9 +1417,10 @@ donutStageEl.addEventListener("pointercancel", function(e){
 });
 
 function startNewSong(){
-  songSegments = [];
-  for (var si = 0; si < segCount; si++) songSegments.push(null);
+  songLevels = RING_DEFS.map(function(){ return { segCount: 4, segments: [null, null, null, null] }; });
   songFocus = 3; songSel = 0; songMode = true;
+  segCount = songLevels[songFocus].segCount;
+  songSegments = songLevels[songFocus].segments;
   setPlaying(false); /* a new song starts paused — use the big play button in the dock */
   $("donutWrap").hidden = false;
   $("stage").style.display = "none";
@@ -1287,8 +1440,8 @@ $("backToRings").addEventListener("click", function(){
   closeMenu();
   updateSplitLabel();
 });
-$("focusDown").addEventListener("click", function(){ if (songFocus > 0){ songFocus--; renderDonut(); } });
-$("focusUp").addEventListener("click", function(){ if (songFocus < RING_DEFS.length - 1){ songFocus++; renderDonut(); } });
+$("focusDown").addEventListener("click", function(){ if (songFocus > 0){ loadFocusLevel(songFocus - 1); renderDonut(); } });
+$("focusUp").addEventListener("click", function(){ if (songFocus < RING_DEFS.length - 1){ loadFocusLevel(songFocus + 1); renderDonut(); } });
 
 /* ============ slide-over menu ============ */
 var menuHideTimer = null;
@@ -1327,6 +1480,7 @@ function setSegCount(n){
   for (var i = 0; i < n; i++) next.push(i < songSegments.length ? songSegments[i] : null);
   var dropped = songSegments.slice(n).filter(Boolean).length;
   segCount = n; songSegments = next;
+  saveFocusLevel();
   if (songSel >= n) songSel = 0;
   renderDonut();
   toast("Focused loop now has " + n + " segment" + (n === 1 ? "" : "s") +
@@ -1417,8 +1571,8 @@ setBpm(96);
 songMode = true;
 songFocus = 3;
 songSel = 0;
-segCount = 4;
-songSegments = [null, null, null, null];
+segCount = songLevels[songFocus].segCount;
+songSegments = songLevels[songFocus].segments;
 setPlaying(false);
 $("donutWrap").hidden = false;
 $("stage").style.display = "none";
