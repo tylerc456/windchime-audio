@@ -188,6 +188,8 @@
       .donut-seg-empty{ fill:var(--panel); stroke:var(--line); stroke-width:2; }
       .donut-seg-full{ fill:var(--bg); stroke:var(--line); stroke-width:2.5; }
       .donut-seg-sel{ stroke:var(--rec); stroke-width:4; }
+      .donut-seg.held{ stroke:var(--rec); stroke-width:5; }
+      .donut-seg.drop-target{ stroke:var(--line); stroke-width:6; stroke-dasharray:10 8; }
       .donut-thin{ fill:none; stroke:var(--empty-ring); stroke-width:2; pointer-events:none; }
       .donut-thin-label{ font-family:"IBM Plex Mono",monospace; font-size:12px; fill:var(--muted); text-anchor:middle; pointer-events:none; }
       .donut-seg-label{ font-family:"IBM Plex Mono",monospace; font-size:15px; font-weight:600; fill:var(--ink); text-anchor:middle; pointer-events:none; }
@@ -345,7 +347,7 @@
       <section class="panel">
         <h2>How it works</h2>
         <p class="hint" id="hint" style="display:none"><b>Tap</b> an empty ring to record a take into it — pick a demo sound in this menu first if you want a kick, snare or tap on that ring. <b>Drag</b> a waveform to roll it around its ring and line its start up with the top — it <b>snaps to the red bar</b> when you get close, so quantizing is just “roll until it clicks.” <b>Drag it onto another ring</b> and let go — you’ll get the big Tile / Move / Copy choice. The <b>red bar</b> at the top is where every ring’s section starts and ends, and each waveform’s <b>beginning</b> — the start of the slice, not its loudest point — is drawn as a <b>red segment</b>, so you align beginnings, not peaks. The dot on each ring is its playhead: the centre ring laps in 1 beat, the next in 2, then 4, 8… The round <b>Split</b> button under the stage chops the selected ring’s take into 1, 2, 4, 8 or 16 independently rolling slices.</p>
-        <p class="hint" id="donutHint">This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
+        <p class="hint" id="donutHint">This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. <b>Press and hold</b> a filled section to select it, then <b>drag inside the section</b> to roll the waveform — the red start segment moves with your drag and <b>snaps to the section’s start edge</b> when you get close. <b>Drag onto another section</b> instead and letting go offers <b>Move / Copy</b> for that sample. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
       </section>
 
       <p class="menu-note"><b>About this mockup:</b> it runs entirely in your browser. There’s no microphone yet — tapping a ring simulates a Koala-style take and synthesises a sound for that ring (hi-hat on the 1-beat, kick on the 2, groove on the 4, bass on the 8, chords beyond) — or use the demo-sound picker to put a kick, snare, tap, bass or chords on any ring you like — so you can feel the interaction model: ring = loop length, drag = roll, drag across rings = Tile / Move / Copy, chop = slice and roll each piece on its own. A production version would swap the simulated takes for real mic input and an audio engine underneath the same interface.</p>
@@ -998,6 +1000,8 @@ var songSegments = [null, null, null, null];
 var songFocus = 3; /* RING_DEFS index: the 4-beat loop */
 var songSel = 0, songMode = false, micBusy = false;
 var DONUT_RIN = 138, DONUT_ROUT = 224, DONUT_RMID = (DONUT_RIN + DONUT_ROUT) / 2;
+/* donut press-hold drag state: quick tap = chooser (unchanged); hold = select + roll / transfer */
+var donutDrag = null, donutHoldTimer = null, suppressDonutClick = false;
 
 function sectorPath(rIn, rOut, a0, a1){
   var p1 = polar(rOut, a0), p2 = polar(rOut, a1), p3 = polar(rIn, a1), p4 = polar(rIn, a0);
@@ -1025,22 +1029,32 @@ function renderDonut(){
     (function(k){
       var a0 = k * step + gap, a1 = (k + 1) * step - gap;
       var seg = songSegments[k];
-      var path = el("path", { "class": "donut-seg " + (seg ? "donut-seg-full" : "donut-seg-empty") + (k === songSel ? " donut-seg-sel" : ""), d: sectorPath(DONUT_RIN, DONUT_ROUT, a0, a1) });
-      path.addEventListener("click", function(){ tapSegment(k); });
+      var isDrop = !!(donutDrag && donutDrag.held && donutDrag.target === k && donutDrag.from !== k);
+      var isHeld = !!(donutDrag && donutDrag.held && donutDrag.from === k);
+      var path = el("path", { "class": "donut-seg " + (seg ? "donut-seg-full" : "donut-seg-empty") + (k === songSel ? " donut-seg-sel" : "") + (isDrop ? " drop-target" : "") + (isHeld ? " held" : ""), d: sectorPath(DONUT_RIN, DONUT_ROUT, a0, a1) });
+      path.addEventListener("click", function(){ if (suppressDonutClick){ suppressDonutClick = false; return; } tapSegment(k); });
       svgD.appendChild(path);
       if (seg && !seg.recording && seg.peaks){
-        var bars = segCount > 8 ? 8 : (segCount > 4 ? 12 : 16), wd = "", startD = "";
+        var bars = segCount > 8 ? 8 : (segCount > 4 ? 12 : 16), wd = "";
+        /* rollDeg = where the sample's logical start sits inside this section (0 = on the
+           section's start edge). Rolling rotates the waveform content within the section,
+           so the red start segment travels with the drag and can be aligned / snapped. */
+        var rollDegN = ((seg.rollDeg || 0) % step + step) % step;
+        var rollFrac = step ? rollDegN / step : 0;
+        var spanIn = (a1 - inset) - (a0 + inset);
         for (var j = 0; j < bars; j++){
           var f = bars === 1 ? 0 : j / (bars - 1);
-          var amp = seg.peaks[Math.min(seg.peaks.length - 1, Math.floor(f * seg.peaks.length))];
-          var a = (a0 + inset) + f * ((a1 - inset) - (a0 + inset));
+          var srcF = ((f - rollFrac) % 1 + 1) % 1;
+          var amp = seg.peaks[Math.min(seg.peaks.length - 1, Math.floor(srcF * seg.peaks.length))];
+          var a = (a0 + inset) + f * spanIn;
           var q1 = polar(DONUT_RMID - amp * 15, a), q2 = polar(DONUT_RMID + amp * 15, a);
-          var bar = "M" + q1[0].toFixed(1) + " " + q1[1].toFixed(1) + "L" + q2[0].toFixed(1) + " " + q2[1].toFixed(1);
-          wd += bar;
-          if (j === 0) startD = bar; /* red = start of the slice, aligned to the section start */
+          wd += "M" + q1[0].toFixed(1) + " " + q1[1].toFixed(1) + "L" + q2[0].toFixed(1) + " " + q2[1].toFixed(1);
         }
         svgD.appendChild(el("path", { "class": "seg-wave", d: wd }));
-        svgD.appendChild(el("path", { "class": "seg-wave-start", d: startD }));
+        var aRed = (a0 + inset) + rollFrac * spanIn;
+        var ampStart = seg.peaks[0];
+        var r1 = polar(DONUT_RMID - ampStart * 15, aRed), r2 = polar(DONUT_RMID + ampStart * 15, aRed);
+        svgD.appendChild(el("path", { "class": "seg-wave-start", d: "M" + r1[0].toFixed(1) + " " + r1[1].toFixed(1) + "L" + r2[0].toFixed(1) + " " + r2[1].toFixed(1) }));
       }
       var mid = polar(DONUT_RMID, k * step + step / 2);
       var lab = el("text", { "class": "donut-seg-label", x: mid[0], y: mid[1] - (seg && segCount <= 8 ? 16 : 2) });
@@ -1093,7 +1107,7 @@ function padPicker(k){
     return { label: KIND_NAME[kind], primary: idx === 0,
       desc: "Drops into section " + (k + 1) + ", start aligned to the section start",
       action: function(){
-        songSegments[k] = { kind: kind, name: KIND_NAME[kind], peaks: genPeaks(seedCounter++ * 149 + k * 31, 72), source: "pad" };
+        songSegments[k] = { kind: kind, name: KIND_NAME[kind], peaks: genPeaks(seedCounter++ * 149 + k * 31, 72), source: "pad", rollDeg: 0 };
         renderDonut();
         toast("Section " + (k + 1) + ": “" + KIND_NAME[kind] + "” in, aligned to the start" + (k === 0 ? " — on the red bar" : ""));
       } };
@@ -1117,12 +1131,139 @@ function micRecord(k){
     renderDonut();
     var segMs = Math.max(700, (RING_DEFS[songFocus].beats / segCount) * (60000 / bpm));
     setTimeout(function(){
-      songSegments[k] = { kind: "mic", name: "Mic take " + (k + 1), peaks: genPeaks(seedCounter++ * 167 + k * 41, 72), source: "mic" };
+      songSegments[k] = { kind: "mic", name: "Mic take " + (k + 1), peaks: genPeaks(seedCounter++ * 167 + k * 41, 72), source: "mic", rollDeg: 0 };
       micBusy = false; renderDonut();
       toast("Section " + (k + 1) + " recorded — it loops with the song. " + (playing ? "" : "Press play at the top to hear it."));
     }, Math.min(segMs, 2400));
   }, beatMs);
 }
+/* ============ donut press-hold: select, roll-drag to align, drag across sections ============
+   Mirrors the rings: hold selects, dragging inside the section rolls the waveform so its red
+   start segment moves (snapping to the section's start edge when close, like the rings snap
+   to the red bar), and releasing over another section offers Move / Copy. A quick tap never
+   arms the drag, so the existing tap choosers (Pad / Mic, replace / re-record / clear) are
+   untouched. */
+function cloneSeg(seg){
+  if (!seg) return null;
+  return { kind: seg.kind, name: seg.name, peaks: seg.peaks ? seg.peaks.slice() : seg.peaks,
+    source: seg.source, rollDeg: seg.rollDeg || 0 };
+}
+function snapDonutRoll(roll, step){
+  var r = ((roll % step) + step) % step;
+  var thr = Math.min(9, step * 0.22); /* same 9° click as the rings, scaled down for narrow sections */
+  if (r <= thr || r >= step - thr) return 0;
+  return r;
+}
+function offerSegTransfer(from, to, snapshot){
+  var seg = songSegments[from]; if (!seg) return;
+  var moving = cloneSeg(seg);
+  var occupied = !!songSegments[to];
+  showChooser("Move “" + seg.name + "”?",
+    "From section " + (from + 1) + " to section " + (to + 1) + " of the " + RING_DEFS[songFocus].label + " loop." +
+    (occupied ? " Section " + (to + 1) + " already has “" + songSegments[to].name + "” — Move or Copy replaces it." : ""),
+    [
+      { label: "Move", primary: true, desc: "Section " + (from + 1) + " is left empty",
+        action: function(){
+          songSegments[to] = moving; songSegments[from] = null; songSel = to; renderDonut();
+          toast("Moved to section " + (to + 1));
+        } },
+      { label: "Copy", desc: "Section " + (from + 1) + " keeps its sample too",
+        action: function(){
+          songSegments[to] = cloneSeg(moving); songSel = to; renderDonut();
+          toast("Copied to section " + (to + 1));
+        } },
+      { label: "Cancel", desc: "Put it back in section " + (from + 1) + ", as it was",
+        action: function(){ songSegments[from] = snapshot; renderDonut(); } }
+    ]);
+}
+function donutPoint(e){
+  var rect = $("donutSvg").getBoundingClientRect();
+  return [ (e.clientX - rect.left) / rect.width * 640, (e.clientY - rect.top) / rect.height * 640 ];
+}
+function donutAngle(e){
+  var p = donutPoint(e);
+  return norm360(Math.atan2(p[0] - CX, -(p[1] - CY)) * 180 / Math.PI);
+}
+function donutSegAt(e){
+  var p = donutPoint(e);
+  var r = Math.hypot(p[0] - CX, p[1] - CY);
+  if (r < DONUT_RIN - 24 || r > DONUT_ROUT + 24) return -1;
+  var a = norm360(Math.atan2(p[0] - CX, -(p[1] - CY)) * 180 / Math.PI);
+  return Math.min(segCount - 1, Math.floor(a / (360 / segCount)));
+}
+var donutStageEl = $("donutStage");
+donutStageEl.addEventListener("pointerdown", function(e){
+  if (micBusy) return;
+  var k = donutSegAt(e);
+  if (k < 0) return;
+  var seg = songSegments[k];
+  if (!seg || seg.recording || !seg.peaks) return; /* empty / recording: plain tap via click, as before */
+  donutDrag = { from: k, target: k, lastAngle: donutAngle(e), moved: 0, held: false, cancelled: false,
+    startX: e.clientX, startY: e.clientY, pointerId: e.pointerId, snapshot: cloneSeg(seg) };
+  clearTimeout(donutHoldTimer);
+  donutHoldTimer = setTimeout(function(){
+    if (!donutDrag || donutDrag.cancelled) return;
+    donutDrag.held = true;
+    songSel = donutDrag.from;
+    try { donutStageEl.setPointerCapture(donutDrag.pointerId); } catch (err) {}
+    renderDonut();
+    toast("Section " + (donutDrag.from + 1) + " selected — drag inside it to roll the red start into place, or drag onto another section for Move / Copy");
+  }, 350);
+});
+donutStageEl.addEventListener("pointermove", function(e){
+  if (!donutDrag || e.pointerId !== donutDrag.pointerId) return;
+  if (!donutDrag.held){
+    if (Math.hypot(e.clientX - donutDrag.startX, e.clientY - donutDrag.startY) > 12){
+      donutDrag.cancelled = true; clearTimeout(donutHoldTimer);
+    }
+    return;
+  }
+  var p = donutPoint(e);
+  if (Math.hypot(p[0] - CX, p[1] - CY) < 70) return; /* angle is meaningless near the centre */
+  var a = donutAngle(e);
+  var delta = ((a - donutDrag.lastAngle + 540) % 360) - 180;
+  donutDrag.lastAngle = a;
+  donutDrag.moved += Math.abs(delta);
+  var step = 360 / segCount;
+  var idxByAngle = Math.min(segCount - 1, Math.floor(a / step));
+  if (idxByAngle === donutDrag.from){
+    donutDrag.target = donutDrag.from;
+    var seg = songSegments[donutDrag.from];
+    if (seg) seg.rollDeg = snapDonutRoll((seg.rollDeg || 0) + delta, step);
+  } else {
+    donutDrag.target = idxByAngle; /* over another section: stop rolling, aim the transfer */
+  }
+  renderDonut();
+});
+function endDonutPointer(e){
+  if (!donutDrag || e.pointerId !== donutDrag.pointerId) return;
+  clearTimeout(donutHoldTimer);
+  var d = donutDrag; donutDrag = null;
+  if (!d.held) return; /* quick tap — the click that follows opens the usual chooser */
+  suppressDonutClick = true;
+  setTimeout(function(){ suppressDonutClick = false; }, 600);
+  if (d.target !== d.from){
+    offerSegTransfer(d.from, d.target, d.snapshot);
+    renderDonut();
+  } else {
+    renderDonut();
+    var seg = songSegments[d.from];
+    if (seg && (seg.rollDeg || 0) === 0 && d.moved > 2) toast("Section " + (d.from + 1) + ": start snapped to the section start");
+  }
+}
+donutStageEl.addEventListener("pointerup", endDonutPointer);
+donutStageEl.addEventListener("pointercancel", function(e){
+  if (!donutDrag || e.pointerId !== donutDrag.pointerId) return;
+  clearTimeout(donutHoldTimer);
+  if (donutDrag.held){
+    songSegments[donutDrag.from] = donutDrag.snapshot;
+    suppressDonutClick = true;
+    setTimeout(function(){ suppressDonutClick = false; }, 600);
+  }
+  donutDrag = null;
+  renderDonut();
+});
+
 function startNewSong(){
   songSegments = [];
   for (var si = 0; si < segCount; si++) songSegments.push(null);
@@ -1226,8 +1367,9 @@ setInterval(function(){
   var loopBeats = RING_DEFS[songFocus].beats, segBeats = loopBeats / segCount;
   songSegments.forEach(function(seg, k){
     if (!seg || seg.recording || !seg.kind) return;
+    var rollBeats = ((seg.rollDeg || 0) / 360) * loopBeats; /* rolled start shifts the hits inside their section */
     genHits(seg.kind, Math.max(segBeats, 0.25)).forEach(function(h){
-      var hb = k * segBeats + h.beat;
+      var hb = k * segBeats + ((rollBeats + h.beat) % segBeats);
       var occ = Math.floor((donutLastBeat - hb) / loopBeats) * loopBeats + hb;
       for (; occ <= ahead; occ += loopBeats){
         if (occ > donutLastBeat){
