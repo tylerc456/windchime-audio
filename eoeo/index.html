@@ -331,7 +331,7 @@
       <section class="panel">
         <h2>How it works</h2>
         <p class="hint" id="hint" style="display:none"><b>Tap</b> an empty ring to record a take into it — pick a demo sound in this menu first if you want a kick, snare or tap on that ring. <b>Drag</b> a waveform to roll it around its ring and line its start up with the top — it <b>snaps to the red bar</b> when you get close, so quantizing is just “roll until it clicks.” <b>Drag it onto another ring</b> and let go — you’ll get the big Tile / Move / Copy choice. The <b>red bar</b> at the top is where every ring’s section starts and ends, and each waveform’s <b>beginning</b> — the start of the slice, not its loudest point — is drawn as a <b>red segment</b>, so you align beginnings, not peaks. The dot on each ring is its playhead: the centre ring laps in 1 beat, the next in 2, then 4, 8… The round <b>Split</b> button under the stage chops the selected ring’s take into 1, 2, 4, 8 or 16 independently rolling slices.</p>
-        <p class="hint" id="donutHint">This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. <b>Press and hold</b> a filled section to select it, then <b>drag inside the section</b> to roll the waveform — the red start segment moves with your drag and <b>snaps to the section’s start edge</b> when you get close. <b>Drag onto another section</b> instead and letting go offers <b>Move / Copy</b> for that sample. To shift a sample to a <b>different level</b>, tap its section and choose <b>Move / copy to the shorter or longer loop</b> — or, while holding it, <b>pull inwards</b> for the loop half as long or <b>push outwards</b> for the loop twice as long and let go. Moving <b>up</b> keeps the sample’s real length and lands it at the same beat in the longer loop; moving <b>down</b> splits or fits it to the shorter cycle. The loop it lands in is also <b>re-split so a segment lasts the same</b> there — shifting down from a 4-segment loop reveals a <b>2-segment</b> ring, shifting up reveals <b>8</b> — unless filled sections on that loop sit beyond the smaller split, in which case it keeps its split and the sample lands using that count. Either way the view switches to the level it landed in, and that level keeps it when you focus away and back with the <b>shorter / longer</b> controls. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
+        <p class="hint" id="donutHint">This is a new song. The loop in focus is the wide donut, split into sections — <b>4 to start</b>; change it any time with the round <b>Split</b> button under the stage (1, 2, 4, 8 or 16). Every other length (shorter and longer) is just a thin line until you focus it from the Song section of this menu — or <b>flick on the donut</b>: a quick flick <b>inwards</b>, towards the centre, pushes the focused loop down and focuses the next <b>longer</b> loop, and a quick flick <b>outwards</b> pulls the next <b>shorter</b> loop into focus, one level per flick, without moving any sample. <b>Tap a section</b> to choose <b>Pad</b> or <b>Mic</b>. A pad sample drops in <b>aligned to the start</b> of its section — its <b>red start segment</b> sits on the section’s start edge, and section 1 starts on the <b>red bar</b> at the top, so it’s already quantized. Mic counts you in, records, then loops. <b>Press and hold</b> a filled section to select it, then <b>drag inside the section</b> to roll the waveform — the red start segment moves with your drag and <b>snaps to the section’s start edge</b> when you get close. <b>Drag onto another section</b> instead and letting go offers <b>Move / Copy</b> for that sample. To shift a sample to a <b>different level</b>, tap its section and choose <b>Move / copy to the shorter or longer loop</b> — or, while holding it, <b>pull inwards</b> for the loop half as long or <b>push outwards</b> for the loop twice as long and let go. Moving <b>up</b> keeps the sample’s real length and lands it at the same beat in the longer loop; moving <b>down</b> splits or fits it to the shorter cycle. The loop it lands in is also <b>re-split so a segment lasts the same</b> there — shifting down from a 4-segment loop reveals a <b>2-segment</b> ring, shifting up reveals <b>8</b> — unless filled sections on that loop sit beyond the smaller split, in which case it keeps its split and the sample lands using that count. Either way the view switches to the level it landed in, and that level keeps it when you focus away and back with the <b>shorter / longer</b> controls. The song starts <b>paused</b> — press the big play button under the stage when you’re ready.</p>
       </section>
 
       <p class="menu-note"><b>About this mockup:</b> it runs entirely in your browser. There’s no microphone yet — tapping a ring simulates a Koala-style take and synthesises a sound for that ring (hi-hat on the 1-beat, kick on the 2, groove on the 4, bass on the 8, chords beyond) — or use the demo-sound picker to put a kick, snare, tap, bass or chords on any ring you like — so you can feel the interaction model: ring = loop length, drag = roll, drag across rings = Tile / Move / Copy, chop = slice and roll each piece on its own. A production version would swap the simulated takes for real mic input and an audio engine underneath the same interface.</p>
@@ -995,6 +995,10 @@ var songSel = 0, songMode = false, micBusy = false;
 var DONUT_RIN = 138, DONUT_ROUT = 224, DONUT_RMID = (DONUT_RIN + DONUT_ROUT) / 2;
 /* donut press-hold drag state: quick tap = chooser (unchanged); hold = select + roll / transfer */
 var donutDrag = null, donutHoldTimer = null, suppressDonutClick = false;
+/* donut focus swipe: a quick radial flick before the hold fires changes which loop is
+   in focus — inward (toward the centre) to the next LONGER loop, outward to the next
+   SHORTER loop. Works from any section, filled or empty, and never moves a sample. */
+var donutSwipe = null;
 
 function sectorPath(rIn, rOut, a0, a1){
   var p1 = polar(rOut, a0), p2 = polar(rOut, a1), p3 = polar(rIn, a1), p4 = polar(rIn, a0);
@@ -1344,11 +1348,51 @@ function donutSegAt(e){
   var a = norm360(Math.atan2(p[0] - CX, -(p[1] - CY)) * 180 / Math.PI);
   return Math.min(segCount - 1, Math.floor(a / (360 / segCount)));
 }
+/* Try to fire the focus swipe for the current pointer position. Returns true when a
+   swipe fired (one level only). A swipe is a quick radial flick: at least 28 units of
+   radial travel, mostly radial rather than around the ring, within 350ms of the press
+   — i.e. before the press-and-hold fires. Once the hold has fired it never fires, so
+   radial dragging with a sample selected stays the existing shift gesture. */
+var DONUT_SWIPE_MIN_RADIAL = 28, DONUT_SWIPE_WINDOW_MS = 350;
+function tryDonutSwipe(e){
+  if (!donutSwipe || donutSwipe.triggered) return false;
+  if (e.pointerId !== donutSwipe.pointerId) return false;
+  if (donutDrag && donutDrag.held) { donutSwipe = null; return false; }
+  if (performance.now() - donutSwipe.startTime > DONUT_SWIPE_WINDOW_MS){ donutSwipe = null; return false; }
+  var p = donutPoint(e);
+  var rad = Math.hypot(p[0] - CX, p[1] - CY);
+  var radial = rad - donutSwipe.startRad; /* negative = toward the centre, positive = away */
+  if (Math.abs(radial) < DONUT_SWIPE_MIN_RADIAL) return false;
+  /* tangential travel (rolling around the ring) must not dominate, or this is a roll, not a flick */
+  var a0 = Math.atan2(donutSwipe.startPoint[0] - CX, -(donutSwipe.startPoint[1] - CY));
+  var a1 = Math.atan2(p[0] - CX, -(p[1] - CY));
+  var dAng = a1 - a0;
+  while (dAng > Math.PI) dAng -= 2 * Math.PI;
+  while (dAng < -Math.PI) dAng += 2 * Math.PI;
+  var tangential = dAng * donutSwipe.startRad;
+  if (Math.abs(radial) < Math.abs(tangential) * 0.75) return false;
+  donutSwipe.triggered = true;
+  clearTimeout(donutHoldTimer);
+  if (donutDrag){ donutDrag.cancelled = true; donutDrag = null; }
+  suppressDonutClick = true;
+  setTimeout(function(){ suppressDonutClick = false; }, 600);
+  /* inward = push the focused ring down and away: focus the next LONGER loop.
+     outward = pull the next SHORTER loop into focus. At either end, nothing happens. */
+  if (radial < 0){ if (songFocus < RING_DEFS.length - 1) loadFocusLevel(songFocus + 1); }
+  else { if (songFocus > 0) loadFocusLevel(songFocus - 1); }
+  donutSwipe = null;
+  renderDonut(); /* the newly focused loop becomes the wide donut — that switch is the feedback */
+  return true;
+}
 var donutStageEl = $("donutStage");
 donutStageEl.addEventListener("pointerdown", function(e){
   if (micBusy) return;
   var k = donutSegAt(e);
   if (k < 0) return;
+  /* every press on the donut — filled or empty section — starts a swipe candidate */
+  var sp = donutPoint(e);
+  donutSwipe = { pointerId: e.pointerId, startPoint: sp,
+    startRad: Math.hypot(sp[0] - CX, sp[1] - CY), startTime: performance.now(), triggered: false };
   var seg = songSegments[k];
   if (!seg || seg.recording || !seg.peaks) return; /* empty / recording: plain tap via click, as before */
   donutDrag = { from: k, target: k, targetLevel: 0, lastAngle: donutAngle(e), moved: 0, held: false, cancelled: false,
@@ -1357,6 +1401,7 @@ donutStageEl.addEventListener("pointerdown", function(e){
   donutHoldTimer = setTimeout(function(){
     if (!donutDrag || donutDrag.cancelled) return;
     donutDrag.held = true;
+    donutSwipe = null; /* hold fired: radial dragging from here is the shift gesture, not a swipe */
     songSel = donutDrag.from;
     try { donutStageEl.setPointerCapture(donutDrag.pointerId); } catch (err) {}
     renderDonut();
@@ -1364,6 +1409,7 @@ donutStageEl.addEventListener("pointerdown", function(e){
   }, 350);
 });
 donutStageEl.addEventListener("pointermove", function(e){
+  if (tryDonutSwipe(e)) return;
   if (!donutDrag || e.pointerId !== donutDrag.pointerId) return;
   if (!donutDrag.held){
     if (Math.hypot(e.clientX - donutDrag.startX, e.clientY - donutDrag.startY) > 12){
@@ -1399,6 +1445,11 @@ donutStageEl.addEventListener("pointermove", function(e){
   renderDonut();
 });
 function endDonutPointer(e){
+  /* a flick whose last movement lands on release still counts as a swipe */
+  if (donutSwipe && e.pointerId === donutSwipe.pointerId){
+    if (tryDonutSwipe(e)) return;
+    donutSwipe = null;
+  }
   if (!donutDrag || e.pointerId !== donutDrag.pointerId) return;
   clearTimeout(donutHoldTimer);
   var d = donutDrag; donutDrag = null;
@@ -1419,6 +1470,7 @@ function endDonutPointer(e){
 }
 donutStageEl.addEventListener("pointerup", endDonutPointer);
 donutStageEl.addEventListener("pointercancel", function(e){
+  if (donutSwipe && e.pointerId === donutSwipe.pointerId) donutSwipe = null;
   if (!donutDrag || e.pointerId !== donutDrag.pointerId) return;
   clearTimeout(donutHoldTimer);
   if (donutDrag.held){
